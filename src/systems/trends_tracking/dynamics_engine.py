@@ -1,4 +1,4 @@
-from schemas.s5_dynamics import S5In, S5Out, S5Trend, S5Point, S5Statistics, S5Visit
+from src.schemas.s5_dynamics import S5In, S5Out, S5Trend, S5Point, S5Statistics, S5Visit
 import numpy as np
 
 
@@ -25,13 +25,13 @@ def _extract_numeric_metrics(visits: list[S5Visit]) -> dict[str, list[tuple[int,
 
 def _calculate_r_squared(y: np.ndarray, y_pred: np.ndarray) -> float:
     """Обчислює коефіцієнт детермінації R^2."""
-    ssr = np.sum((y - y_pred) ** 2)
+    sse = np.sum((y - y_pred) ** 2)
     sst = np.sum((y - np.mean(y)) ** 2)
 
     if sst == 0:
         return 1.0
     
-    return max(0.0, min(1.0, float(1.0 - (ssr / sst))))
+    return max(0.0, min(1.0, float(1.0 - (sse / sst))))
 
 def _build_trend(metric: str, data: list[tuple[int, float]]) -> S5Trend:
     """Виконує time-series аналіз для однієї метрики та формує S5Trend."""
