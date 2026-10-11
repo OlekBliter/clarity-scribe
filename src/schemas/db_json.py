@@ -1,7 +1,7 @@
 """JSON-колонки SQLite ↔ Pydantic. Решту (статуси, зв'язки) перевіряє Оркестратор."""
 from pydantic import TypeAdapter
 
-from .contracts import MedicalCardData, NerMap, S1Metadata, S2Out, S3Out, SoapNote
+from .contracts import MedicalCardData, NerMap, S1Metadata, S2Out, S3Out, S4Out
 
 JSON_COLUMNS: dict[tuple[str, str], TypeAdapter] = {
     ("sessions", "channel_map"): TypeAdapter(dict[str, int]),
@@ -10,8 +10,8 @@ JSON_COLUMNS: dict[tuple[str, str], TypeAdapter] = {
     ("biomarkers", "data"): TypeAdapter(S2Out),
     ("medical_cards", "draft"): TypeAdapter(S3Out),
     ("medical_cards", "data"): TypeAdapter(MedicalCardData),
-    ("soap_notes", "draft"): TypeAdapter(SoapNote),
-    ("soap_notes", "final"): TypeAdapter(SoapNote),
+    ("soap_notes", "draft"): TypeAdapter(S4Out),
+    ("soap_notes", "final"): TypeAdapter(S4Out),
 }
 
 
