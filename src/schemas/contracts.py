@@ -229,7 +229,7 @@ class PlanItem(_Text):
     confirmed: bool | None = None  # лише в final: лікар підтвердив recommended
 
 
-class SoapNote(Lenient):
+class S4Out(Lenient):
     subjective: Subjective
     objective: Objective
     assessment: Assessment
