@@ -1,6 +1,5 @@
 import pytest
-from src.systems.trends_tracking.dynamics_engine import calculate_dynamics
-from src.schemas.s5_dynamics import S5In
+from src.systems.trends_tracking.dynamics_engine import calculate_dynamics, S5In
 
 def create_mock_biomarkers(f0_var: float):
     """Генерує мінімально валідний словник для S2Out згідно з контрактом"""

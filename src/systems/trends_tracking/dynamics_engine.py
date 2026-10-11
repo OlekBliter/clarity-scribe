@@ -1,6 +1,13 @@
-from src.schemas.s5_dynamics import S5In, S5Out, S5Trend, S5Point, S5Statistics, S5Visit
 import numpy as np
+from pydantic import BaseModel
+from src.schemas.contracts import S5Out, S5Trend, S5Point, S5Statistics, S2Out
 
+class S5Visit(BaseModel):
+    session_number: int
+    biomarkers: S2Out
+
+class S5In(BaseModel):
+    visits: list[S5Visit]
 
 def _extract_numeric_metrics(visits: list[S5Visit]) -> dict[str, list[tuple[int, float]]]:
     """Парсить візити і групує скалярні метрики: {metric_name: [(session_num, value)]}."""
@@ -11,9 +18,9 @@ def _extract_numeric_metrics(visits: list[S5Visit]) -> dict[str, list[tuple[int,
         features = {}
 
         if hasattr(visit.biomarkers, 'raw_dsp_features') and visit.biomarkers.raw_dsp_features:
-            features.update(visit.biomarkers.raw_dsp_features)
+            features.update(visit.biomarkers.raw_dsp_features.model_dump())
         if hasattr(visit.biomarkers, 'inferred_indices') and visit.biomarkers.inferred_indices:
-            features.update(visit.biomarkers.inferred_indices)
+            features.update(visit.biomarkers.inferred_indices.model_dump())
 
         for metric, val in features.items():
             if isinstance(val, (int, float)) and not isinstance(val, bool):
