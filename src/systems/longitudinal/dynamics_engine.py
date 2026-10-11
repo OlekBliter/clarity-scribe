@@ -10,18 +10,20 @@ class S5In(BaseModel):
     visits: list[S5Visit]
 
 def _extract_numeric_metrics(visits: list[S5Visit]) -> dict[str, list[tuple[int, float]]]:
-    """Парсить візити і групує скалярні метрики: {metric_name: [(session_num, value)]}."""
+    """Parse visits and group scalar metrics: {metric_name: [(session_num, value)]}."""
     grouped_data = {}
 
     for visit in visits:
         session_num = visit.session_number
         features = {}
 
+        # Combine measured and inferred biomarker fields for metric extraction
         if hasattr(visit.biomarkers, 'raw_dsp_features') and visit.biomarkers.raw_dsp_features:
             features.update(visit.biomarkers.raw_dsp_features.model_dump())
         if hasattr(visit.biomarkers, 'inferred_indices') and visit.biomarkers.inferred_indices:
             features.update(visit.biomarkers.inferred_indices.model_dump())
 
+        # Keep only scalar numeric metrics, ignore booleans and nested objects
         for metric, val in features.items():
             if isinstance(val, (int, float)) and not isinstance(val, bool):
                 if metric not in grouped_data:
@@ -31,7 +33,7 @@ def _extract_numeric_metrics(visits: list[S5Visit]) -> dict[str, list[tuple[int,
     return grouped_data
 
 def _calculate_r_squared(y: np.ndarray, y_pred: np.ndarray) -> float:
-    """Обчислює коефіцієнт детермінації R^2."""
+    """Calculate the coefficient of determination R^2."""
     sse = np.sum((y - y_pred) ** 2)
     sst = np.sum((y - np.mean(y)) ** 2)
 
@@ -41,14 +43,14 @@ def _calculate_r_squared(y: np.ndarray, y_pred: np.ndarray) -> float:
     return max(0.0, min(1.0, float(1.0 - (sse / sst))))
 
 def _build_trend(metric: str, data: list[tuple[int, float]]) -> S5Trend:
-    """Виконує time-series аналіз для однієї метрики та формує S5Trend."""
+    """Perform time-series analysis for a single metric and build an S5Trend."""
     x = np.array([p[0] for p in data])
     y = np.array([p[1] for p in data])
     
     baseline = float(y[0])
     latest = float(y[-1])
     
-    # для 1 візиту
+    # for a single visit
     if len(x) == 1:
         points = [S5Point(session_number=int(x[0]), value=baseline, trend_value=None)]
         stats = S5Statistics(
@@ -58,7 +60,7 @@ def _build_trend(metric: str, data: list[tuple[int, float]]) -> S5Trend:
         )
         return S5Trend(metric=metric, points=points, statistics=stats)
         
-    # для кількох візитів
+    # for multiple visits
     slope, intercept = np.polyfit(x, y, 1)
     y_pred = slope * x + intercept
     r_squared = _calculate_r_squared(y, y_pred)
@@ -83,12 +85,15 @@ def _build_trend(metric: str, data: list[tuple[int, float]]) -> S5Trend:
     
     return S5Trend(metric=metric, points=points, statistics=stats)
 
-def calculate_dynamics(request: S5In) -> S5Out:
+def calculate_dynamics(visits: list[dict]) -> dict:
     """
-    Головна точка входу для Оркестратора.
-    Приймає контракт S5In, проганяє time-series аналіз і віддає S5Out.
+    Accepts raw dictionaries from the orchestrator,
+    validates them locally, computes trends, and returns a dict.
     """
-    grouped_data = _extract_numeric_metrics(request.visits)
-    trends = [_build_trend(metric, data) for metric, data in grouped_data.items()]
+    validated_visits = [S5Visit.model_validate(v) for v in visits]
     
-    return S5Out(trends=trends)
+    grouped_data = _extract_numeric_metrics(validated_visits)
+    trends = [_build_trend(metric, data) for metric, data in grouped_data.items()]
+
+    out_model = S5Out(trends=trends)
+    return out_model.model_dump()
