@@ -1,7 +1,13 @@
 import pytest
-from src.systems.longitudinal.dynamics_engine import calculate_dynamics
+from src.systems.longitudinal.metrics_extractor import MetricsExtractor
+from src.systems.longitudinal.trend_calculator import TrendCalculator
+from src.systems.longitudinal.dynamics_service import DynamicsService
 from src.schemas.contracts import S5Out
 
+extractor = MetricsExtractor()
+calculator = TrendCalculator()
+
+service = DynamicsService(extractor=extractor, calculator=calculator)
 
 def create_mock_biomarkers(f0_var: float):
     """Create a minimal valid biomarker payload for the S2Out contract."""
@@ -43,7 +49,7 @@ def test_dynamics_single_visit():
     """Check the single-visit case."""
     visits_payload = [{"session_number": 1, "biomarkers": create_mock_biomarkers(42.1)}]
 
-    out_dict = calculate_dynamics(visits=visits_payload)
+    out_dict = service.calculate(visits=visits_payload)
     response = S5Out.model_validate(out_dict)
     f0_trend = next(t for t in response.trends if t.metric == "f0_variability_sd")
 
@@ -61,7 +67,7 @@ def test_dynamics_multiple_visits():
         {"session_number": 4, "biomarkers": create_mock_biomarkers(58.4)},
     ]
 
-    out_dict = calculate_dynamics(visits=visits_payload)
+    out_dict = service.calculate(visits=visits_payload)
     response = S5Out.model_validate(out_dict)
 
     f0_trend = next(t for t in response.trends if t.metric == "f0_variability_sd")
