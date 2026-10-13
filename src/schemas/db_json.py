@@ -1,4 +1,4 @@
-"""JSON-колонки SQLite ↔ Pydantic. Решту (статуси, зв'язки) перевіряє Оркестратор."""
+"""SQLite JSON columns ↔ Pydantic. The rest (statuses, relationships) is verified by the Orchestrator."""
 from pydantic import TypeAdapter
 
 from .contracts import MedicalCardData, NerMap, S1Metadata, S2Out, S3Out, S4Out
@@ -16,11 +16,11 @@ JSON_COLUMNS: dict[tuple[str, str], TypeAdapter] = {
 
 
 def load_column(table: str, column: str, text: str | None):
-    """Рядок з БД → модель (None лишається None)."""
+    """DB row → model (None remains None)."""
     return None if text is None else JSON_COLUMNS[(table, column)].validate_json(text)
 
 
 def dump_column(table: str, column: str, obj) -> str:
-    """Модель (або dict) → валідований JSON-рядок для INSERT/UPDATE."""
+    """Model (or dict) → validated JSON string for INSERT/UPDATE."""
     ta = JSON_COLUMNS[(table, column)]
     return ta.dump_json(ta.validate_python(obj)).decode()

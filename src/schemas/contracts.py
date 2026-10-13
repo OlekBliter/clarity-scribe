@@ -1,8 +1,8 @@
-"""ClarityScribe · контракти (lite, для MVP). Потрібен pydantic >= 2.6.
+"""ClarityScribe · contracts (lite, for MVP). Requires pydantic >= 2.6.
 
-Strict  — внутрішні системи: зайвий ключ = помилка.
-Lenient — виходи LLM (S3, S4): зайві ключі ігноруються, щоб не витрачати токени на повтори.
-Вхідні контракти (S1.in … S5.in) не валідуємо: їх формує сам Оркестратор.
+Strict  — internal systems: extra key = error.
+Lenient — LLM outputs (S3, S4): extra keys are ignored to avoid wasting tokens on retries.
+Input contracts (S1.in … S5.in) are not validated: they are constructed by the Orchestrator itself.
 """
 import re
 from datetime import datetime
@@ -24,8 +24,8 @@ Language = Literal["uk", "en"]
 Sec = Annotated[float, Field(ge=0)]
 
 
-# ───────────── S1 · Транскрибація ─────────────
-class S1Metadata(Strict):  # зберігається в sessions.transcript_meta
+# ───────────── S1 · Transcription ─────────────
+class S1Metadata(Strict):  # stored in sessions.transcript_meta
     audio_duration_sec: Sec
     doctor_speaking_time_sec: Sec
     patient_speaking_time_sec: Sec
@@ -55,13 +55,13 @@ class S1Out(Strict):
     @model_validator(mode="after")
     def _ids(self):
         if [s.segment_id for s in self.segments] != list(range(len(self.segments))):
-            raise ValueError("segment_id мають іти підряд з 0")
+            raise ValueError("segment_id must be sequential starting from 0")
         return self
 
 
 # ───────────── S6 · NER ─────────────
 EntityType = Literal["PERSON", "ADDRESS", "PHONE", "EMAIL", "ORG", "BIRTH_DATE", "OTHER_ID"]
-PLACEHOLDER_RE = re.compile(r"\[[^\[\]_\s]+_\d+\]")  # [ПІБ_1], [АДРЕСА_2] …
+PLACEHOLDER_RE = re.compile(r"\[[^\[\]_\s]+_\d+\]")  # [NAME_1], [ADDRESS_2] …
 
 
 class NerEntry(Strict):
@@ -69,7 +69,7 @@ class NerEntry(Strict):
     original: str = Field(min_length=1)
 
 
-NerMap = dict[str, NerEntry]  # sessions.ner_map: {"[ПІБ_1]": {"type": "PERSON", "original": "…"}}
+NerMap = dict[str, NerEntry]  # sessions.ner_map: {"[NAME_1]": {"type": "PERSON", "original": "…"}}
 
 
 class NerItem(Strict):
@@ -86,10 +86,10 @@ class S6SanitizeOut(Strict):
         for it in self.items:
             for ph in PLACEHOLDER_RE.findall(it.text):
                 if ph not in self.map:
-                    raise ValueError(f"{it.key}: плейсхолдера {ph} немає в map")
+                    raise ValueError(f"{it.key}: placeholder {ph} is missing from map")
             for ph, e in self.map.items():
-                if e.original in it.text:  # головна перевірка приватності
-                    raise ValueError(f"{it.key}: у тексті лишилась сутність {ph}")
+                if e.original in it.text:  # primary privacy check
+                    raise ValueError(f"{it.key}: unmasked entity {ph} remains in text")
         return self
 
 
@@ -100,11 +100,11 @@ class S6RestoreOut(Strict):
     def _restored(self):
         for it in self.items:
             if PLACEHOLDER_RE.search(it.text):
-                raise ValueError(f"{it.key}: лишились нерозкриті плейсхолдери")
+                raise ValueError(f"{it.key}: unresolved placeholders remain")
         return self
 
 
-# ───────────── S2 · Біомаркери (зберігається цілком у biomarkers.data) ─────────────
+# ───────────── S2 · Biomarkers (stored entirely in biomarkers.data) ─────────────
 class RawDspFeatures(Strict):
     f0_variability_sd: Annotated[float, Field(ge=0)]
     f0_mean_hz: Annotated[float, Field(gt=0)]
@@ -113,26 +113,26 @@ class RawDspFeatures(Strict):
     hnr_db: float
     speech_rate_syllables_per_sec: Annotated[float, Field(ge=0)]
     pause_ratio: Annotated[float, Field(ge=0, le=1)]
-    mean_latent_response_time_sec: Annotated[float, Field(ge=0)] | None  # null, якщо немає жодної латентності
+    mean_latent_response_time_sec: Annotated[float, Field(ge=0)] | None  # null if there is no latency at all
 
 
 class IntrasessionDynamics(Strict):
     f0_variability_change_percent: float
     speech_rate_change_percent: float
     pause_ratio_change_percent: float
-    trend_summary: str  # напр. "activation"; повний перелік значень ще не затверджено
+    trend_summary: str  # e.g., "activation"; full list of values not yet finalized
 
 
 class InferredIndices(Strict):
     affect_flatness_flag: bool
     vocal_jitter_percentile: Annotated[float, Field(ge=0, le=100)]
     psychomotor_retardation_index: float
-    intrasession_dynamics: IntrasessionDynamics | None  # null для надто короткого запису
+    intrasession_dynamics: IntrasessionDynamics | None  # null for recordings that are too short
 
 
 class WindowChunk(Strict):
     window_index: Annotated[int, Field(ge=0)]
-    time_range: str = Field(pattern=r"^\d{2,}:[0-5]\d-\d{2,}:[0-5]\d$")  # «00:00-05:00»
+    time_range: str = Field(pattern=r"^\d{2,}:[0-5]\d-\d{2,}:[0-5]\d$")  # "00:00-05:00"
     f0_variability_sd: Annotated[float, Field(ge=0)]
     speech_rate_syllables_per_sec: Annotated[float, Field(ge=0)]
     pause_ratio: Annotated[float, Field(ge=0, le=1)]
@@ -144,9 +144,9 @@ class S2Out(Strict):
     window_chunks: list[WindowChunk]
 
 
-# ───────────── S3 · Медкартка (LLM) ─────────────
+# ───────────── S3 · Medical Card (LLM) ─────────────
 BOOL_FIELDS = {"history.on_medication", "safety.suicidal_past", "safety.suicidal_now"}
-MODEL_FIELDS = (  # усі поля filled_by = M
+MODEL_FIELDS = (  # all fields with filled_by = M
     "request.complaint", "request.onset", "request.why_now",
     "history.similar_before", "history.prior_therapy", "history.helpful_or_not",
     "history.on_medication", "history.medications_list",
@@ -169,13 +169,13 @@ class S3Field(Lenient):
     def _rules(self):
         if self.status == "filled":
             if self.value is None or not self.evidence:
-                raise ValueError("filled потребує value і evidence")
+                raise ValueError("filled requires value and evidence")
             if isinstance(self.value, bool) != (self.field_id in BOOL_FIELDS):
-                raise ValueError("тип value не відповідає типу поля (bool / text)")
+                raise ValueError("value type does not match the field type (bool / text)")
         elif self.value is not None:
-            raise ValueError(f"{self.status}: value має бути null")
+            raise ValueError(f"{self.status}: value must be null")
         if self.status == "contradictory" and not self.contradiction_text:
-            raise ValueError("contradictory потребує contradiction_text")
+            raise ValueError("contradictory requires contradiction_text")
         return self
 
 
@@ -186,17 +186,17 @@ class S3Out(Lenient):
     def _complete(self):
         ids = [f.field_id for f in self.fields]
         if len(set(ids)) != len(ids) or set(ids) != set(MODEL_FIELDS):
-            raise ValueError("у відповіді мають бути рівно всі 22 поля M, без дублів")
+            raise ValueError("the response must contain exactly all 22 M fields, without duplicates")
         return self
 
     def check_evidence(self, known_segment_ids: set[int]) -> None:
-        """Виклик Оркестратора: evidence має посилатись на реальні репліки."""
+        """Called by Orchestrator: evidence must reference existing segments."""
         for f in self.fields:
             if not set(f.evidence) <= known_segment_ids:
-                raise ValueError(f"{f.field_id}: evidence посилається на відсутні репліки")
+                raise ValueError(f"{f.field_id}: evidence references non-existent segments")
 
 
-class CardField(Lenient):  # medical_cards.data: поля S3 + поля лікаря
+class CardField(Lenient):  # medical_cards.data: S3 fields + doctor-entered fields
     field_id: str
     status: Literal["filled", "not_discussed", "contradictory", "doctor_input"]
     value: str | bool | None = None
@@ -204,10 +204,10 @@ class CardField(Lenient):  # medical_cards.data: поля S3 + поля ліка
 
 
 class MedicalCardData(Lenient):
-    fields: list[CardField] = Field(default_factory=list)  # [] — якщо S3 вимкнено
+    fields: list[CardField] = Field(default_factory=list)  # [] — if S3 is disabled
 
 
-# ───────────── S4 · SOAP (LLM). Одна модель і для draft, і для final ─────────────
+# ───────────── S4 · SOAP (LLM). Single model for both draft and final ─────────────
 class _Text(Lenient):
     text: str = Field(min_length=1)
 
@@ -226,7 +226,7 @@ class Assessment(_Text):
 
 class PlanItem(_Text):
     origin: Literal["doctor_stated", "recommended"]
-    confirmed: bool | None = None  # лише в final: лікар підтвердив recommended
+    confirmed: bool | None = None  # final only: doctor confirmed the recommended item
 
 
 class S4Out(Lenient):
@@ -236,11 +236,11 @@ class S4Out(Lenient):
     plan: list[PlanItem] = Field(default_factory=list)
 
 
-# ───────────── S5 · Динаміка (рахується на льоту, не зберігається) ─────────────
+# ───────────── S5 · Dynamics (computed on the fly, not stored) ─────────────
 class S5Point(Strict):
     session_number: Annotated[int, Field(ge=1)]
     value: float
-    trend_value: float | None = None  # null, якщо візит один
+    trend_value: float | None = None  # null if there is only one session
 
 
 class S5Statistics(Strict):
@@ -263,15 +263,15 @@ class S5Out(Strict):
     trends: list[S5Trend]
 
 
-# ───────────── Команда лікаря (UI → Оркестратор) ─────────────
+# ───────────── Doctor Command (UI → Orchestrator) ─────────────
 class Edit(Strict):
-    path: str  # field_id для картки; шлях у S4.out для SOAP, напр. "plan[1].confirmed"
+    path: str  # field_id for card; path in S4.out for SOAP, e.g., "plan[1].confirmed"
     new_value: Any
 
 
 class DoctorCommand(Strict):
     target: Literal["card", "soap"]
-    id: str  # patient_id для картки, session_id для SOAP
+    id: str  # patient_id for card, session_id for SOAP
     action: Literal["edit", "approve"]
     edits: list[Edit] = Field(default_factory=list)
     review_started_at: datetime
@@ -280,5 +280,5 @@ class DoctorCommand(Strict):
     @model_validator(mode="after")
     def _order(self):
         if self.at < self.review_started_at:
-            raise ValueError("at раніше за review_started_at")
+            raise ValueError("at is earlier than review_started_at")
         return self
