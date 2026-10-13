@@ -2,7 +2,7 @@ from .metrics_extractor import MetricsExtractor
 from .trend_calculator import TrendCalculator
 
 class DynamicsService:
-    """The main service of System 5"""
+    """Metric extraction and trend calculation for visit data."""
 
     def __init__(self, extractor: MetricsExtractor, calculator: TrendCalculator):
         self.extractor = extractor
