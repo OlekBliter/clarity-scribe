@@ -14,6 +14,9 @@ class TrendCalculator:
         return max(0.0, min(1.0, float(1.0 - (sse / sst))))
 
     def build_trend_dict(self, metric: str, data: list[tuple[int, float]]) -> dict:
+        # Sort visits chronologically before calculating the trend.
+        data.sort(key=lambda item: item[0])
+
         x = np.array([p[0] for p in data])
         y = np.array([p[1] for p in data])
             
