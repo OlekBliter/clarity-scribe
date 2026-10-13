@@ -1,1 +1,2 @@
 pydantic==2.7.4
+numpy
