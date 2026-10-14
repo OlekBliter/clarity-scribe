@@ -9,7 +9,9 @@ import os
 
 #Load vosk model
 load_dotenv()
-MODEL_DIR = os.getenv("MODEL_DIR", "models/vosk-model-small-uk-v3-small")
+model_dir = os.getenv("MODEL_DIR")
+if not model_dir:
+    raise ValueError("MODEL_DIR is not set; define it in .env")
 
 # Maximum pause (in seconds) between two neighbouring words that still keeps
 # them in the same segment. A longer pause starts a new segment.
@@ -26,7 +28,7 @@ class Segment:
         self.confidence = confidence
 
 @lru_cache(maxsize=1)
-def load_model(model_path = MODEL_DIR) -> Model:
+def load_model(model_path = model_dir) -> Model:
     """
     Load the Vosk model from disk and cache it.
 
