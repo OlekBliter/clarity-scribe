@@ -14,7 +14,7 @@ class MetricsExtractor:
             if isinstance(raw_features, dict):
                 features.update(raw_features)
 
-            inferred = biomarkers.get("inferred_indicies")
+            inferred = biomarkers.get("inferred_indices")
             if isinstance(inferred, dict):
                 features.update(inferred)
 
