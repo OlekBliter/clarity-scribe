@@ -1,4 +1,4 @@
-from vad_detectors import get_timestamps
+from .vad_detectors import get_timestamps
 import io
 from pydub import AudioSegment
 

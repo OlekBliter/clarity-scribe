@@ -1,8 +1,8 @@
 from pathlib import Path
 from pydub import AudioSegment
-from channel_splitter import split
-from speech_filter import get_voice_activity 
-from vosk_transcription import load_model, recognize_words, create_output_segments, collect_metadata
+from .channel_splitter import split
+from .speech_filter import get_voice_activity 
+from .vosk_transcription import load_model, recognize_words, create_output_segments, collect_metadata
 
 class PatientAudioPipeline:
     """

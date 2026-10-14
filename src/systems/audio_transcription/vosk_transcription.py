@@ -2,7 +2,7 @@ from functools import lru_cache
 from pydub import AudioSegment
 from pathlib import Path
 from vosk import Model, KaldiRecognizer
-from channel_splitter import split
+from .channel_splitter import split
 import json
 from dotenv import load_dotenv
 import os
