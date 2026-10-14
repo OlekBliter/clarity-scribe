@@ -1,4 +1,5 @@
 from pydub import AudioSegment
+from pathlib import Path
 
 def split(path: str, channel_map: dict[str, int]) -> dict:
     """
@@ -15,7 +16,26 @@ def split(path: str, channel_map: dict[str, int]) -> dict:
         A dict {role: AudioSegment}, where every AudioSegment is mono,
         16 kHz, 16-bit (the format Vosk and most ASR models require).
     """
-    full_audio = AudioSegment.from_file(path)   
+
+    audio_path = Path(path)
+    if not audio_path.is_file():
+        raise FileNotFoundError(f"Audio file not found: '{path}'")
+
+    if not channel_map:
+        raise ValueError("channel_map cannot be empty.")
+        
+    try:
+        full_audio = AudioSegment.from_file(path)
+    except Exception as e:
+        raise ValueError(f"Failed to load or decode audio file '{path}': {e}") from e
+   
     channels = full_audio.split_to_mono()
+    num_channels = len(channels)
+
+    for role, idx in channel_map.items():
+        if idx < 0:
+            raise ValueError(f"Channel index for role '{role}' cannot be negative: {idx}")
+        if idx >= num_channels:
+            raise ValueError(f"Role '{role}' requires channel index {idx}, but the audio file only has {num_channels} channel(s).")
 
     return {role: channels[idx].set_frame_rate(16000).set_sample_width(2) for role, idx in channel_map.items()}

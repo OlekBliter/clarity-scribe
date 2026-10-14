@@ -18,7 +18,7 @@ def load_model() -> Any:
     model = load_silero_vad()
     return model
 
-def get_timestamps(audio: AudioSegment) -> list[dict[str, int]]:
+def get_timestamps(audio: AudioSegment) -> list[dict[str, float]]:
     """
     Detect speech intervals in a mono recording with the Silero VAD model.
 
@@ -43,6 +43,6 @@ def get_timestamps(audio: AudioSegment) -> list[dict[str, int]]:
         model,
         return_seconds=True,
         sampling_rate=audio.frame_rate,
-        speech_pad_ms=0
+        speech_pad_ms=250
     )
     return speech_timestamps

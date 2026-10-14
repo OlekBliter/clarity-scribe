@@ -2,8 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
 from pydub import AudioSegment
-from systems.audio_transcription import patient_audio_pipeline as pap_module
-from systems.audio_transcription.patient_audio_pipeline import PatientAudioPipeline
+from systems.audio_transcription import audio_transcription_service as pap_module
+from systems.audio_transcription.audio_transcription_service import PatientAudioPipeline
 
 CHANNEL_MAP = {"DOCTOR": 0, "PATIENT": 1}
 

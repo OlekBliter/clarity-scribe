@@ -3,7 +3,7 @@ import io
 from pydub import AudioSegment
 
 
-def get_voice_activity(audio: AudioSegment) -> tuple[AudioSegment, list[dict[str, int]]]:
+def get_voice_activity(audio: AudioSegment) -> tuple[AudioSegment, list[dict[str, float]]]:
     """
     Remove silence and non-speech parts from a mono recording using a
     Voice Activity Detector (VAD), and return only the speech glued together.
