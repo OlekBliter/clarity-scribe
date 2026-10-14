@@ -6,8 +6,6 @@ from .vosk_transcription import load_model, recognize_words, create_output_segme
 
 class PatientAudioPipeline:
     """
-    Processes one S1 request (see the S1.in / S1.out contract).
-
     Method 1, get_patient_audio():    the patient's speech with silence and noise cut out.
     Method 2, get_transcription_result(): everything else in S1.out
                                       (language, metadata, segments).
