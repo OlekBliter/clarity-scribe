@@ -7,8 +7,7 @@ from .vosk_transcription import load_model, recognize_words, create_output_segme
 class PatientAudioPipeline:
     """
     Method 1, get_patient_audio():    the patient's speech with silence and noise cut out.
-    Method 2, get_transcription_result(): everything else in S1.out
-                                      (language, metadata, segments).
+    Method 2, get_transcription_result(): language, metadata, segments.
 
     The recording is decoded and split into channels only once; both methods
     share the same per-speaker tracks.
@@ -51,7 +50,7 @@ class PatientAudioPipeline:
 
     def get_transcription_result(self) -> dict:
         """
-        Transcribe both speakers and return the rest of S1.out:
+        Transcribe both speakers:
         {"language": ..., "metadata": {...}, "segments": [...]}.
 
         Recognition runs on the ORIGINAL tracks (not the VAD-stitched one),

@@ -9,9 +9,9 @@ import os
 
 #Load vosk model
 load_dotenv()
-model_dir = os.getenv("MODEL_DIR")
+model_dir = os.getenv("VOSK_MODEL_DIR")
 if not model_dir:
-    raise ValueError("MODEL_DIR is not set; define it in .env")
+    raise ValueError("VOSK_MODEL_DIR is not set; define it in .env")
 
 # Maximum pause (in seconds) between two neighbouring words that still keeps
 # them in the same segment. A longer pause starts a new segment.
