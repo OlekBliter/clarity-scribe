@@ -1,5 +1,5 @@
-vosk 
-pydub
-audioop-lts
-silero_vad
-torchaudio
+vosk==0.3.45
+pydub==0.25.1
+audioop-lts==0.2.2; python_version >= "3.13"
+silero_vad==6.2.3
+torchaudio==2.11.0
