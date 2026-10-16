@@ -3,6 +3,11 @@ from src.systems.longitudinal.metrics_extractor import MetricsExtractor
 from src.systems.longitudinal.trend_calculator import TrendCalculator
 from src.systems.longitudinal.dynamics_service import DynamicsService
 from src.schemas.contracts import S5Out
+from src.systems.longitudinal.exceptions import (
+    InvalidVisitPayloadError,
+    MissingSessionNumberError,
+    TrendCalculationError,
+)
 
 extractor = MetricsExtractor()
 calculator = TrendCalculator()
@@ -76,3 +81,26 @@ def test_dynamics_multiple_visits():
     assert f0_trend.statistics.latest_value == 58.4
     assert f0_trend.statistics.slope_per_session is not None
     assert f0_trend.statistics.delta_absolute == pytest.approx(16.3, 0.01)
+
+
+def test_invalid_visits_payload_type():
+    """Ensure non-list payload raises InvalidVisitPayloadError."""
+    with pytest.raises(InvalidVisitPayloadError):
+        service.calculate(visits="invalid_payload")  # type: ignore
+
+
+def test_missing_session_number():
+    """Ensure missing session_number raises MissingSessionNumberError."""
+    visits_payload = [{"biomarkers": create_mock_biomarkers(42.1)}]
+    with pytest.raises(MissingSessionNumberError):
+        service.calculate(visits=visits_payload)
+
+
+def test_duplicate_session_numbers_error():
+    """Ensure identical session numbers raise TrendCalculationError instead of numpy crash."""
+    visits_payload = [
+        {"session_number": 1, "biomarkers": create_mock_biomarkers(42.1)},
+        {"session_number": 1, "biomarkers": create_mock_biomarkers(48.0)},
+    ]
+    with pytest.raises(TrendCalculationError):
+        service.calculate(visits=visits_payload)
