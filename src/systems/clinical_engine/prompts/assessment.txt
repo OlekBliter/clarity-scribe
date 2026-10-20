@@ -30,13 +30,13 @@ Return a JSON object with:
 
 === USER ===
 <subjective>
-{subjective_json}
+{subjective}
 </subjective>
 
 <objective>
-{objective_json}
+{objective}
 </objective>
 
 <transcript>
-{transcript_json}
+{transcription}
 </transcript>

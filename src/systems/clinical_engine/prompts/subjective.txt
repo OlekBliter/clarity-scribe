@@ -44,5 +44,5 @@ where the speaker is "PATIENT".
 
 === USER ===
 <transcript>
-{transcript_json}
+{transcription}
 </transcript>
