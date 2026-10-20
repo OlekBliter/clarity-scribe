@@ -1,0 +1,4 @@
+gliner==0.2.29
+torch==2.14.1
+pymorphy3==2.0.6
+pymorphy3-dicts-uk==2.4.1.1.1663094765
