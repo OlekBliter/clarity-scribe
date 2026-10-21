@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple, Any, Optional
 from scipy.stats import theilslopes
 from src.biomarkers.dsp_pitch_quality import analyze_segment_pitch_and_quality, aggregate_segment_dsp
 from src.biomarkers.dsp_tempo_pauses import analyze_speech_tempo_and_internal_pauses
-
+from .exceptions import AcousticBiomarkerError
 
 def analyze_windows_and_dynamics(
     sound_mono: parselmouth.Sound,

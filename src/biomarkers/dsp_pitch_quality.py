@@ -2,8 +2,7 @@ import parselmouth
 from parselmouth.praat import call
 import numpy as np
 from typing import List, Dict, Any
-from src.biomarkers.exceptions import AudioProcessingError
-
+from .exceptions import AcousticBiomarkerError, AudioProcessingError
 
 def analyze_segment_pitch_and_quality(sound_segment: parselmouth.Sound) -> Dict[str, Any]:
     """

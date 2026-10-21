@@ -1,7 +1,7 @@
 import parselmouth
 import numpy as np
 from typing import List, Optional, Tuple, Dict, Any
-
+from .exceptions import AcousticBiomarkerError
 
 def analyze_speech_tempo_and_internal_pauses(
     sound_segments: List[parselmouth.Sound],
