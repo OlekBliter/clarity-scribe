@@ -2,9 +2,9 @@ import parselmouth
 import numpy as np
 from typing import List, Dict, Tuple, Any, Optional
 from scipy.stats import theilslopes
-from src.biomarkers.dsp_pitch_quality import analyze_segment_pitch_and_quality, aggregate_segment_dsp
-from src.biomarkers.dsp_tempo_pauses import analyze_speech_tempo_and_internal_pauses
 
+from .dsp_pitch_quality import analyze_segment_pitch_and_quality, aggregate_segment_dsp
+from .dsp_tempo_pauses import analyze_speech_tempo_and_internal_pauses
 
 def analyze_windows_and_dynamics(
     sound_mono: parselmouth.Sound,
