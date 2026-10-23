@@ -37,11 +37,23 @@ class NerMapManager:
         return self._create(mention, entity_type)
 
     def tag_for_word(self, word: str) -> str | None:
-        """Tag of a known named entity containing this capitalised word, or None."""
-        if not self._is_proper(word):
+        """Tag of a known entity that this stray word is another form of, or None.
+
+        Spoken (ASR) text has no capital letters, so a lowercase word is propagated only when it is
+        safe: a name of a known person, or the whole mention of a one-word place. Capitalised words
+        may belong to any named entity.
+        """
+        if not self._is_word(word):
             return None
-        candidates = self._candidates(self._morphology.keys(word))
-        return candidates[0] if candidates else None
+        for tag in self._candidates(self._morphology.keys(word)):
+            entity = self._entities[tag]
+            if word[0].isupper():
+                return tag
+            if entity.type == EntityType.PERSON and self._morphology.has_name_grammeme(word):
+                return tag
+            if entity.type == EntityType.ADDRESS and len(entity.original.split()) == 1:
+                return tag
+        return None
 
     def to_dict(self) -> dict:
         """``{tag: Entity}`` -> ``{tag: {"type", "original"}}``."""
@@ -65,16 +77,23 @@ class NerMapManager:
     def _index(self, tag: str, entity_type: EntityType, mention: str) -> None:
         """Registers all tags for an entity to _word_index dict (mention: [tags])"""
         if entity_type.is_named:
-            for word in self._proper_words(mention):
+            for word in self._words(mention):
                 for key in self._morphology.keys(word):
                     self._word_index.setdefault(key, []).append(tag)
 
     def _extend(self, tag: str, mention: str) -> None:
         """Keep the longest mention as the original and index its words."""
         entity = self._entities[tag]
-        if len(mention) > len(entity.original):
+        if self._is_better_original(mention, entity.original):
             entity.original = mention
         self._index(tag, entity.type, mention)
+
+    def _is_better_original(self, new: str, old: str) -> bool:
+        """More words win ("Іван Петренко" over "Петренка"); with equal length the dictionary form
+        (nominative) wins, because inflecting from it is the most reliable."""
+        if len(new.split()) != len(old.split()):
+            return len(new.split()) > len(old.split())
+        return self._morphology.is_dictionary_form(new) and not self._morphology.is_dictionary_form(old)
 
     def _find_named(self, mention: str, entity_type: EntityType) -> str | None:
         """An entity whose words cover every word of the shorter mention.
@@ -82,14 +101,14 @@ class NerMapManager:
         "Іван Петренко" and "Петренка" match; "Іван Петренко" and "Іван Коваль" do not,
         so two people with one first name stay apart.
         """
-        words = [self._morphology.keys(w) for w in self._proper_words(mention)]
+        words = [self._morphology.keys(w) for w in self._words(mention)]
         if not words:
             return None
         for tag in self._candidates(frozenset().union(*words)):
             entity = self._entities[tag]
             if entity.type != entity_type:
                 continue
-            known = [self._morphology.keys(w) for w in self._proper_words(entity.original)]
+            known = [self._morphology.keys(w) for w in self._words(entity.original)]
             shorter, longer = (words, known) if len(words) <= len(known) else (known, words)
             if all(any(keys & other for other in longer) for keys in shorter):
                 return tag
@@ -100,8 +119,9 @@ class NerMapManager:
         order = list(self._entities)
         return sorted(tags, key=order.index)
 
-    def _proper_words(self, text: str) -> list:
-        return [m.group() for m in self._morphology.find_words(text) if self._is_proper(m.group())]
+    def _words(self, text: str) -> list:
+        """Words of a mention that identify the entity: long enough and not function words."""
+        return [m.group() for m in self._morphology.find_words(text) if self._is_word(m.group())]
 
-    def _is_proper(self, word: str) -> bool:
-        return len(word) >= self._min_word_len and word[0].isupper()
+    def _is_word(self, word: str) -> bool:
+        return len(word) >= self._min_word_len and not self._morphology.is_function_word(word)

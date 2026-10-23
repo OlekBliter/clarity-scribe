@@ -7,6 +7,7 @@ from .morphology import UkrainianMorphology
 
 EDGE_CHARS = " \t\n,.;:!?"
 TAG_RE = re.compile(r"\[[A-Za-z]+_\d+\]")
+NUMBER_RE = re.compile(r"\s*(?:№|N)\s?\d+")
 SENTENCE_BREAKS = ".!?…\n:—-\"«"
 
 
@@ -22,6 +23,7 @@ class Sanitizer:
         self._morphology = morphology
         self._min_word_len = config.min_word_len
         self._keep_keys = frozenset(word.lower() for word in config.keep_words)
+        self._ignore_keys = frozenset(word.lower() for word in config.ignore_words)
 
     def sanitize(self, texts: list[str], manager: NerMapManager) -> list[str]:
         detected = [self._detect(text, manager) for text in texts]
@@ -39,14 +41,19 @@ class Sanitizer:
                                           key=lambda m: m.start), text)
 
     def unmasked_names(self, sanitized_text: str) -> list[str]:
-        """Capitalised words in mid-sentence that are still visible: possible missed names."""
+        """Visible words that look like names: listed as names in the dictionary (works for lowercase
+        speech text) or capitalised in the middle of a sentence. Possible leaks, for logging only."""
         clean = TAG_RE.sub(" # ", sanitized_text)
         found = []
         for match in self._morphology.find_words(clean):
+            word = match.group()
+            if len(word) < self._min_word_len or self._morphology.keys(word) & self._keep_keys:
+                continue
             before = clean[:match.start()].rstrip()
-            if len(match.group()) >= self._min_word_len and match.group()[0].isupper() \
-                    and before and before[-1] not in SENTENCE_BREAKS:
-                found.append(match.group())
+            capitalised = word[0].isupper() and before and before[-1] not in SENTENCE_BREAKS
+            if (capitalised and not self._morphology.is_function_word(word)) \
+                    or self._morphology.has_name_grammeme(word):
+                found.append(word)
         return found
 
     def _detect(self, text: str, manager: NerMapManager) -> list[TagMask]:
@@ -55,6 +62,7 @@ class Sanitizer:
         for span in self._merge(spans, text):
             span = self._without_keep_words(span, text)
             if span:
+                span = self._retype_digits(span, text)
                 masks.append(TagMask(span.start, span.end,
                                      manager.tag_for(text[span.start:span.end], span.entity_type)))
         return masks
@@ -96,9 +104,9 @@ class Sanitizer:
 
     def _without_keep_words(self, span: Span, text: str) -> Span | None:
         """Cut kinship words ("баба", "лікар") from the edges of a person span; they stay visible."""
-        if span.entity_type != EntityType.PERSON:
-            return span
         words = list(self._morphology.find_words(text[span.start:span.end]))
+        if span.entity_type != EntityType.PERSON:
+            return None if self._only_common_words(words) else self._with_number(span, text)
         first, last = 0, len(words)
         while first < last and self._morphology.keys(words[first].group()) & self._keep_keys:
             first += 1
@@ -106,8 +114,36 @@ class Sanitizer:
             last -= 1
         if first == last:
             return None
+        if not any(self._is_plausible_name(w.group()) for w in words[first:last]):
+            return None  # the model tagged a pronoun or an adjective ("я", "сімейному")
         return Span(span.start + words[first].start(), span.start + words[last - 1].end(),
                     span.entity_type, span.priority)
+
+    @staticmethod
+    def _retype_digits(span: Span, text: str) -> Span:
+        """A model span of three or more bare digits ("1234", "067") is the start of a number, not a place."""
+        fragment = text[span.start:span.end]
+        if span.entity_type in (EntityType.ADDRESS, EntityType.ORG, EntityType.PERSON) \
+                and fragment.replace(" ", "").isdigit() and len(fragment.replace(" ", "")) >= 3:
+            return Span(span.start, span.end, EntityType.OTHER_ID, span.priority)
+        return span
+
+    def _only_common_words(self, words: list) -> bool:
+        """True when every word is a function word or a known false-positive word ("я", "центру", "телефон")."""
+        return bool(words) and all(self._morphology.is_function_word(w.group())
+                                   or self._morphology.keys(w.group()) & self._ignore_keys for w in words)
+
+    @staticmethod
+    def _with_number(span: Span, text: str) -> Span:
+        """Keep the number of an organisation with it: "ліцей №5", "лікарня № 4"."""
+        if span.entity_type != EntityType.ORG:
+            return span
+        match = NUMBER_RE.match(text, span.end)
+        return Span(span.start, match.end(), span.entity_type, span.priority) if match else span
+
+    def _is_plausible_name(self, word: str) -> bool:
+        return word[0].isupper() and not self._morphology.is_function_word(word) \
+            or self._morphology.is_name_like(word)
 
     @staticmethod
     def _join_adjacent(masks: list[TagMask], text: str) -> list[TagMask]:
