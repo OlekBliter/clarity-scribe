@@ -7,6 +7,10 @@ WORD_RE = re.compile(r"[^\W\d_]+(?:['’ʼ\-][^\W\d_]+)*")
 NAME_GRAMMEMES = {"Name", "Surn", "Patr"}
 CLAUSE_END_RE = re.compile(r"[.!?;:\n]")
 LOOKBACK_WORDS = 3 # how many words before a tag are searched for a preposition
+# Closed word classes (pronouns, prepositions, conjunctions, particles): the only words the sanitiser may discard
+# when a model tags them as an entity. Verbs, adverbs and numerals are NOT here: many names and places look like them.
+CLOSED_POS = {"NPRO", "PREP", "CONJ", "PRCL"}
+
 # Parts of speech that are never names. 
 FUNCTION_POS = {"NPRO", "PREP", "CONJ", "PRCL", "ADVB", "INTJ", "NUMR", "VERB", "INFN"}
 
@@ -43,6 +47,11 @@ class UkrainianMorphology:
     def is_function_word(self, word: str) -> bool:
         """Pronouns, prepositions, particles, verbs and the like: never part of a name."""
         return self._kind(word)[0]
+
+    def is_closed_class(self, word: str) -> bool:
+        """A pronoun, preposition, conjunction or particle ("я", "вона", "мене", "на"): safe to leave unmasked."""
+        low = word.lower().replace("’", "'")
+        return any(p.tag.POS in CLOSED_POS for p in self._analyzer.parse(low))
 
     def is_name_like(self, word: str) -> bool:
         """The dictionary knows the word as a name/surname/patronymic, or does not know it at all."""
