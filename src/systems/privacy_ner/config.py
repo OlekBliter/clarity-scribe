@@ -8,9 +8,11 @@ from .models import EntityType
 # Zero-shot labels sent to GLiNER and the entity type each one means.
 GLINER_LABELS = {
     "person": EntityType.PERSON, "людина": EntityType.PERSON, "пацієнт": EntityType.PERSON,
-    "лікар": EntityType.PERSON, "ім'я та прізвище": EntityType.PERSON,
+    "лікар": EntityType.PERSON, "ім'я та прізвище": EntityType.PERSON, "ім'я": EntityType.PERSON,
+    "прізвище": EntityType.PERSON, "surname": EntityType.PERSON,
     "address": EntityType.ADDRESS, "адреса": EntityType.ADDRESS, "street address": EntityType.ADDRESS,
-    "місто": EntityType.ADDRESS, "населений пункт": EntityType.ADDRESS,
+    "місто": EntityType.ADDRESS, "населений пункт": EntityType.ADDRESS, "вулиця": EntityType.ADDRESS,
+    "street": EntityType.ADDRESS, "адреса проживання": EntityType.ADDRESS,
     "organization": EntityType.ORG, "організація": EntityType.ORG, "компанія": EntityType.ORG,
     "лікарня": EntityType.ORG, "медичний заклад": EntityType.ORG, "місце роботи": EntityType.ORG,
 }
@@ -29,6 +31,7 @@ KEEP_WORDS = (
     "сусід", "сусідка", "лікар", "лікарка",
 )
 
+IGNORE_WORDS = ("центр", "телефон", "вулиця", "пошта", "компанія", "організація", "лікарня", "клініка")
 
 # Local GLiNER weights live next to the other models: <project root>/models/gliner_multi-v2.1.
 # The location is set by GLINER_MODEL_DIR (see .env.example); the default matches the example value.
@@ -43,10 +46,11 @@ def _model_dir_from_env() -> str:
 @dataclass(frozen=True)
 class NerConfig:
     gliner_model: str = field(default_factory=_model_dir_from_env)
-    gliner_threshold: float = 0.3
+    gliner_threshold: float = 0.2
     window_words: int = 100
     window_overlap: int = 20
     min_word_len: int = 3
     gliner_labels: dict = field(default_factory=lambda: dict(GLINER_LABELS))
     tag_prefixes: dict = field(default_factory=lambda: dict(TAG_PREFIXES))
     keep_words: tuple = KEEP_WORDS
+    ignore_words: tuple = IGNORE_WORDS
