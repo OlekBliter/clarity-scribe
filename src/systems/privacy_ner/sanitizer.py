@@ -59,10 +59,12 @@ class Sanitizer:
     def _detect(self, text: str, manager: NerMapManager) -> list[TagMask]:
         spans = [s for extractor in self._extractors for s in extractor.extract(text)]
         masks = []
-        for span in self._merge(spans, text):
+        merged = self._merge(spans, text)
+        for index, span in enumerate(merged):
+            limit = merged[index + 1].start if index + 1 < len(merged) else len(text)
+            span = self._with_number(self._retype_digits(span, text), text, limit)
             span = self._without_keep_words(span, text)
             if span:
-                span = self._retype_digits(span, text)
                 masks.append(TagMask(span.start, span.end,
                                      manager.tag_for(text[span.start:span.end], span.entity_type)))
         return masks
@@ -106,7 +108,8 @@ class Sanitizer:
         """Cut kinship words ("баба", "лікар") from the edges of a person span; they stay visible."""
         words = list(self._morphology.find_words(text[span.start:span.end]))
         if span.entity_type != EntityType.PERSON:
-            return None if self._only_common_words(words) else self._with_number(span, text)
+            has_digit = any(c.isdecimal() for c in text[span.start:span.end])
+            return span if has_digit or not self._only_common_words(words) else None
         first, last = 0, len(words)
         while first < last and self._morphology.keys(words[first].group()) & self._keep_keys:
             first += 1
@@ -130,16 +133,17 @@ class Sanitizer:
 
     def _only_common_words(self, words: list) -> bool:
         """True when every word is a function word or a known false-positive word ("я", "центру", "телефон")."""
-        return bool(words) and all(self._morphology.is_function_word(w.group())
-                                   or self._morphology.keys(w.group()) & self._ignore_keys for w in words)
+        return bool(words) and all(
+            (self._morphology.is_function_word(w.group()) and not w.group()[0].isupper())  # "Сміла" is a city
+            or self._morphology.keys(w.group()) & self._ignore_keys for w in words)
 
     @staticmethod
-    def _with_number(span: Span, text: str) -> Span:
-        """Keep the number of an organisation with it: "ліцей №5", "лікарня № 4"."""
+    def _with_number(span: Span, text: str, limit: int) -> Span:
+        """Keep the number of an organisation with it ("ліцей №5", "лікарня № 4"), never reaching into the next span."""
         if span.entity_type != EntityType.ORG:
             return span
         match = NUMBER_RE.match(text, span.end)
-        return Span(span.start, match.end(), span.entity_type, span.priority) if match else span
+        return Span(span.start, match.end(), span.entity_type, span.priority) if match and match.end() <= limit else span
 
     def _is_plausible_name(self, word: str) -> bool:
         return word[0].isupper() and not self._morphology.is_function_word(word) \
