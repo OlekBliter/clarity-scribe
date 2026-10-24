@@ -132,10 +132,9 @@ class Sanitizer:
         return span
 
     def _only_common_words(self, words: list) -> bool:
-        """True when every word is a function word or a known false-positive word ("я", "центру", "телефон")."""
-        return bool(words) and all(
-            (self._morphology.is_function_word(w.group()) and not w.group()[0].isupper())  # "Сміла" is a city
-            or self._morphology.keys(w.group()) & self._ignore_keys for w in words)
+        """True when every word is a pronoun, preposition, particle or a known false-positive word ("центру")."""
+        return bool(words) and all(self._morphology.is_closed_class(w.group())
+                                   or self._morphology.keys(w.group()) & self._ignore_keys for w in words)
 
     @staticmethod
     def _with_number(span: Span, text: str, limit: int) -> Span:
@@ -146,8 +145,9 @@ class Sanitizer:
         return Span(span.start, match.end(), span.entity_type, span.priority) if match and match.end() <= limit else span
 
     def _is_plausible_name(self, word: str) -> bool:
-        return word[0].isupper() and not self._morphology.is_function_word(word) \
-            or self._morphology.is_name_like(word)
+        """Only pronouns and other closed-class words are rejected. Rare lowercase surnames are often unknown to the
+        dictionary or look like common nouns ("лико"), so requiring a dictionary name would leak them."""
+        return not self._morphology.is_closed_class(word)
 
     @staticmethod
     def _join_adjacent(masks: list[TagMask], text: str) -> list[TagMask]:
