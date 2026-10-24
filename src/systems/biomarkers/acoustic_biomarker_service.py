@@ -2,16 +2,16 @@ import os
 import parselmouth
 from typing import Dict, Any, Optional
 
-from src.biomarkers.exceptions import (
-    AudioFileNotFoundError,
-    AudioProcessingError,
-    InvalidSegmentError,
-)
 from .dsp_pitch_quality import analyze_segment_pitch_and_quality, aggregate_segment_dsp
 from .dsp_tempo_pauses import analyze_speech_tempo_and_internal_pauses
 from .index_calculator import compute_inferred_indices
 from .windowing import analyze_windows_and_dynamics
-from .exceptions import AcousticBiomarkerError
+from .exceptions import (
+    AcousticBiomarkerError,
+    AudioFileNotFoundError,
+    AudioProcessingError,
+    InvalidSegmentError,
+)
 
 
 class AcousticBiomarkerService:
@@ -54,7 +54,6 @@ class AcousticBiomarkerService:
             end_t = seg.get("end_time", 0.0)
 
             if start_t >= end_t:
-                logger.warning(f"Skipping invalid segment timestamps: start={start_t}, end={end_t}")
                 continue
 
             if start_t < total_duration:

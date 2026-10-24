@@ -1,6 +1,6 @@
 import pytest
-from systems.biomarkers import AcousticBiomarkerService
-from systems.biomarkers.exceptions import AudioFileNotFoundError
+from src.systems.biomarkers import AcousticBiomarkerService
+from src.systems.biomarkers.exceptions import AudioFileNotFoundError
 
 
 @pytest.fixture

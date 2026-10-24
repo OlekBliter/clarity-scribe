@@ -89,8 +89,18 @@ def aggregate_segment_dsp(segment_results: List[Dict[str, Any]]) -> Dict[str, fl
     weights = np.array([r["n_voiced"] for r in valid], dtype=float)
     total_w = np.sum(weights)
 
+    # 1. Mean of F0 (no changes)
     f0_mean = float(np.sum(np.array([r["f0_mean_hz"] for r in valid]) * weights) / total_w)
-    f0_sd_hz = float(np.sum(np.array([r["f0_sd_hz"] for r in valid]) * weights) / total_w)
+    # 2. Correct SD for F0 (Hz) using pooled variance
+    # Σ n_i * (σ_i² + (μ_i − μ)²) / N
+    variances_hz = [
+        w * (r["f0_sd_hz"] ** 2 + (r["f0_mean_hz"] - f0_mean) ** 2)
+        for r, w in zip(valid, weights)
+    ]
+    f0_sd_hz = float(np.sqrt(np.sum(variances_hz) / total_w))
+
+    # 3. For ST mean within-segment variability SD,
+    # since semitones are calculated relative to the median of each individual segment.
     f0_sd_st = float(np.sum(np.array([r["f0_sd_st"] for r in valid]) * weights) / total_w)
     jitter = float(np.sum(np.array([r["jitter"] for r in valid]) * weights) / total_w)
     shimmer = float(np.sum(np.array([r["shimmer"] for r in valid]) * weights) / total_w)
