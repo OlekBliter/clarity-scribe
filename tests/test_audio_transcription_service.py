@@ -2,16 +2,16 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
 from pydub import AudioSegment
-from systems.audio_transcription import audio_transcription_service as pap_module
-from systems.audio_transcription.audio_transcription_service import PatientAudioPipeline
+from src.systems.audio_transcription import audio_transcription_service as pap_module
+from src.systems.audio_transcription.audio_transcription_service import AudioTranscriptionService
 
 CHANNEL_MAP = {"DOCTOR": 0, "PATIENT": 1}
 
 @pytest.fixture
 def mock_deps(monkeypatch):
     """
-    Replaces all external dependencies in patient_audio_pipeline
-    so that only the logic of the PatientAudioPipeline class is tested.
+    Replaces all external dependencies in audio_transcription_service
+    so that only the logic of the AudioTranscriptionService class is tested.
     """
     # Create fake audio tracks
     fake_doctor_track = MagicMock(spec=AudioSegment)
@@ -53,78 +53,109 @@ def mock_deps(monkeypatch):
     return mocks
 
 
-# ------------------------------------------------------------------- _get_tracks
+@pytest.fixture
+def pipeline(mock_deps):
+    """A pipeline built with all external dependencies mocked."""
+    return AudioTranscriptionService(language_hint="uk")
 
-def test_get_tracks_caches_result_and_calls_split_once(mock_deps):
-    pipeline = PatientAudioPipeline("fake.wav", CHANNEL_MAP, "uk", "")
-    
-    tracks1 = pipeline._get_tracks()
-    tracks2 = pipeline._get_tracks()
-    
-    assert tracks1 is tracks2
+
+# ------------------------------------------------------------------ __init__
+
+def test_init_loads_model_once(mock_deps, pipeline):
+    mock_deps.load_model.assert_called_once()
+
+
+# ----------------------------------------------------------------- load_tracks
+
+def test_load_tracks_calls_split_and_returns_tracks(mock_deps, pipeline):
+    tracks = pipeline.load_tracks("fake.wav", CHANNEL_MAP)
+
+    assert tracks is mock_deps.tracks
     mock_deps.split.assert_called_once_with("fake.wav", CHANNEL_MAP)
 
 
-def test_get_tracks_missing_role_raises_keyerror():
+def test_load_tracks_missing_role_raises_keyerror(mock_deps, pipeline):
     # PATIENT role is missing
     invalid_map = {"DOCTOR": 0, "NURSE": 1}
-    pipeline = PatientAudioPipeline("fake.wav", invalid_map, "uk", "")
-    
+
     with pytest.raises(KeyError, match="PATIENT"):
-        pipeline._get_tracks()
+        pipeline.load_tracks("fake.wav", invalid_map)
+
+    mock_deps.split.assert_not_called()
 
 
-# ------------------------------------------------------------- get_patient_audio
+def test_pipeline_is_reusable_for_several_recordings(mock_deps, pipeline):
+    tracks_a = {"DOCTOR": MagicMock(), "PATIENT": MagicMock()}
+    tracks_b = {"DOCTOR": MagicMock(), "PATIENT": MagicMock()}
+    mock_deps.split.side_effect = [tracks_a, tracks_b]
 
-def test_get_patient_audio_returns_stitched_track(mock_deps):
-    pipeline = PatientAudioPipeline("fake.wav", CHANNEL_MAP, "uk", "")
-    result = pipeline.get_patient_audio()
-    
+    assert pipeline.load_tracks("a.wav", CHANNEL_MAP) is tracks_a
+    assert pipeline.load_tracks("b.wav", CHANNEL_MAP) is tracks_b
+
+    # Same instance, model loaded only once
+    mock_deps.load_model.assert_called_once()
+    assert mock_deps.split.call_count == 2
+
+
+# ------------------------------------------------------------- get_stitched_audio
+
+def test_get_stitched_audio_returns_stitched_track(mock_deps, pipeline):
+    result = pipeline.get_stitched_audio("PATIENT", mock_deps.tracks)
+
     assert result is mock_deps.stitched
     mock_deps.get_voice_activity.assert_called_once_with(mock_deps.tracks["PATIENT"])
-    # export must not be called because patient_audio_out is empty
+    # export must not be called because out_path was not given
     mock_deps.stitched.export.assert_not_called()
 
 
-def test_get_patient_audio_saves_file_if_path_provided(mock_deps, tmp_path):
+def test_get_stitched_audio_saves_file_if_path_provided(mock_deps, pipeline, tmp_path):
     out_file = tmp_path / "audio" / "patient_out.wav"
-    pipeline = PatientAudioPipeline("fake.wav", CHANNEL_MAP, "uk", str(out_file))
-    
-    pipeline.get_patient_audio()
-    
+
+    pipeline.get_stitched_audio("PATIENT", mock_deps.tracks, out_path=str(out_file))
+
     assert out_file.parent.exists()  # the output folder must have been created
     mock_deps.stitched.export.assert_called_once_with(str(out_file), format="wav")
 
 
-def test_get_patient_audio_bubbles_up_vad_error(mock_deps):
+def test_get_stitched_audio_bubbles_up_vad_error(mock_deps, pipeline):
     mock_deps.get_voice_activity.side_effect = ValueError("No patient speech")
-    pipeline = PatientAudioPipeline("fake.wav", CHANNEL_MAP, "uk", "")
-    
-    with pytest.raises(ValueError, match="No patient speech"):
-        pipeline.get_patient_audio()
 
+    with pytest.raises(ValueError, match="No patient speech"):
+        pipeline.get_stitched_audio("PATIENT", mock_deps.tracks)
+
+def test_get_stitched_audio_uses_requested_actor(mock_deps, pipeline):
+    pipeline.get_stitched_audio("DOCTOR", mock_deps.tracks)
+
+    mock_deps.get_voice_activity.assert_called_once_with(mock_deps.tracks["DOCTOR"])
+
+def test_get_stitched_audio_unknown_actor_raises(mock_deps, pipeline):
+    with pytest.raises(KeyError, match="NURSE"):
+        pipeline.get_stitched_audio("NURSE", mock_deps.tracks)
+
+    mock_deps.get_voice_activity.assert_not_called()
 
 # ------------------------------------------------------ get_transcription_result
 
-def test_get_transcription_result_structure_and_rounding(mock_deps):
-    pipeline = PatientAudioPipeline("fake.wav", CHANNEL_MAP, "uk", "")
-    
-    result = pipeline.get_transcription_result()
-    
+def test_get_transcription_result_structure_and_rounding(mock_deps, pipeline):
+    result = pipeline.get_transcription_result(mock_deps.tracks)
+
     # 1. Check calls to the dependencies
-    mock_deps.load_model.assert_called_once()
     assert mock_deps.recognize_words.call_count == 2
+    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["DOCTOR"], mock_deps.model, "DOCTOR")
+    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["PATIENT"], mock_deps.model, "PATIENT")
     mock_deps.create_output_segments.assert_called_once()
     mock_deps.collect_metadata.assert_called_once_with(mock_deps.segments, mock_deps.tracks["DOCTOR"])
 
     # 2. Check the format of the returned dict
     assert result["language"] == "uk"
-    
+
     # Metadata values must be rounded to 2 decimal places
     assert result["metadata"] == {
         "audio_duration_sec": 10.56,  # 10.556 -> 10.56
-        "silence_time_sec": 2.12      # 2.123 -> 2.12
+        "silence_time_sec": 2.12,     # 2.123 -> 2.12
     }
-    
+
     # Segments must be converted to plain dicts via vars()
-    assert result["segments"] == [{"segment_id": 0, "speaker": "DOCTOR", "start_time": 0.0, "end_time": 1.0, "text": "Привіт", "confidence": 0.9}]
+    assert result["segments"] == [
+        {"segment_id": 0, "speaker": "DOCTOR", "start_time": 0.0, "end_time": 1.0, "text": "Привіт", "confidence": 0.9}
+    ]
