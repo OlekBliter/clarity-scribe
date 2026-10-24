@@ -3,15 +3,15 @@ from unittest.mock import MagicMock
 import pytest
 from pydub import AudioSegment
 from src.systems.audio_transcription import audio_transcription_service as pap_module
-from src.systems.audio_transcription.audio_transcription_service import PatientAudioPipeline
+from src.systems.audio_transcription.audio_transcription_service import AudioTranscriptionService
 
 CHANNEL_MAP = {"DOCTOR": 0, "PATIENT": 1}
 
 @pytest.fixture
 def mock_deps(monkeypatch):
     """
-    Replaces all external dependencies in patient_audio_pipeline
-    so that only the logic of the PatientAudioPipeline class is tested.
+    Replaces all external dependencies in audio_transcription_service
+    so that only the logic of the AudioTranscriptionService class is tested.
     """
     # Create fake audio tracks
     fake_doctor_track = MagicMock(spec=AudioSegment)
@@ -56,7 +56,7 @@ def mock_deps(monkeypatch):
 @pytest.fixture
 def pipeline(mock_deps):
     """A pipeline built with all external dependencies mocked."""
-    return PatientAudioPipeline(language_hint="uk")
+    return AudioTranscriptionService(language_hint="uk")
 
 
 # ------------------------------------------------------------------ __init__
@@ -97,10 +97,10 @@ def test_pipeline_is_reusable_for_several_recordings(mock_deps, pipeline):
     assert mock_deps.split.call_count == 2
 
 
-# ------------------------------------------------------------- get_patient_audio
+# ------------------------------------------------------------- get_stitched_audio
 
-def test_get_patient_audio_returns_stitched_track(mock_deps, pipeline):
-    result = pipeline.get_patient_audio(mock_deps.tracks)
+def test_get_stitched_audio_returns_stitched_track(mock_deps, pipeline):
+    result = pipeline.get_stitched_audio("PATIENT", mock_deps.tracks)
 
     assert result is mock_deps.stitched
     mock_deps.get_voice_activity.assert_called_once_with(mock_deps.tracks["PATIENT"])
@@ -108,21 +108,31 @@ def test_get_patient_audio_returns_stitched_track(mock_deps, pipeline):
     mock_deps.stitched.export.assert_not_called()
 
 
-def test_get_patient_audio_saves_file_if_path_provided(mock_deps, pipeline, tmp_path):
+def test_get_stitched_audio_saves_file_if_path_provided(mock_deps, pipeline, tmp_path):
     out_file = tmp_path / "audio" / "patient_out.wav"
 
-    pipeline.get_patient_audio(mock_deps.tracks, out_path=str(out_file))
+    pipeline.get_stitched_audio("PATIENT", mock_deps.tracks, out_path=str(out_file))
 
     assert out_file.parent.exists()  # the output folder must have been created
     mock_deps.stitched.export.assert_called_once_with(str(out_file), format="wav")
 
 
-def test_get_patient_audio_bubbles_up_vad_error(mock_deps, pipeline):
+def test_get_stitched_audio_bubbles_up_vad_error(mock_deps, pipeline):
     mock_deps.get_voice_activity.side_effect = ValueError("No patient speech")
 
     with pytest.raises(ValueError, match="No patient speech"):
-        pipeline.get_patient_audio(mock_deps.tracks)
+        pipeline.get_stitched_audio("PATIENT", mock_deps.tracks)
 
+def test_get_stitched_audio_uses_requested_actor(mock_deps, pipeline):
+    pipeline.get_stitched_audio("DOCTOR", mock_deps.tracks)
+
+    mock_deps.get_voice_activity.assert_called_once_with(mock_deps.tracks["DOCTOR"])
+
+def test_get_stitched_audio_unknown_actor_raises(mock_deps, pipeline):
+    with pytest.raises(KeyError, match="NURSE"):
+        pipeline.get_stitched_audio("NURSE", mock_deps.tracks)
+
+    mock_deps.get_voice_activity.assert_not_called()
 
 # ------------------------------------------------------ get_transcription_result
 

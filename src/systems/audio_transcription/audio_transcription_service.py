@@ -6,14 +6,14 @@ from .vosk_transcription import load_model, recognize_words, create_output_segme
 
 REQUIRED_ROLES = {"DOCTOR", "PATIENT"}
 
-class PatientAudioPipeline:
+class AudioTranscriptionService:
     """
     Reusable pipeline: one instance can process any number of recordings.
 
     Usage:
-        pipeline = PatientAudioPipeline(language_hint="uk")
+        pipeline = AudioTranscriptionService(language_hint="uk")
         tracks = pipeline.load_tracks("a.wav", {"PATIENT": 0, "DOCTOR": 1})
-        audio = pipeline.get_patient_audio(tracks, out_path="a_patient.wav")
+        audio = pipeline.get_stitched_audio("PATIENT", tracks, out_path="a_patient.wav")
         result = pipeline.get_transcription_result(tracks)
 
     The recording is decoded and split into channels once (load_tracks);
@@ -35,17 +35,24 @@ class PatientAudioPipeline:
             raise KeyError(f"channel_map must contain {sorted(missing)}")
         return split(audio_path, channel_map)
 
-    def get_patient_audio(self, tracks: dict[str, AudioSegment], out_path: str | None = None) -> AudioSegment:
+    def get_stitched_audio(self, actor: str, tracks: dict[str, AudioSegment], out_path: str | None = None) -> AudioSegment:
         """
-        Return the patient's track with everything except speech removed
+        Return the actor's track with everything except speech removed
         (silence, noise, artifacts), glued into one continuous clip.
 
-        If out_path is given, the result is also saved there as WAV.
+        Args:
+            actor: Role whose track to process, e.g. "PATIENT" or "DOCTOR".
+            tracks: Per-role tracks from load_tracks().
+            out_path: If given, the result is also saved there as WAV.
 
         Raises:
-            ValueError: If the VAD finds no patient speech.
+            KeyError: If actor is not one of the roles in tracks.
+            ValueError: If the VAD finds no speech in the actor's track.
         """
-        stitched, _timestamps = get_voice_activity(tracks["PATIENT"])
+        if actor not in tracks:
+            raise KeyError(f"Unknown actor '{actor}'. Available: {sorted(tracks)}")
+
+        stitched, _timestamps = get_voice_activity(tracks[actor])
 
         if out_path:
             path = Path(out_path)
