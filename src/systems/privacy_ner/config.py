@@ -46,7 +46,7 @@ def _model_dir_from_env() -> str:
 @dataclass(frozen=True)
 class NerConfig:
     gliner_model: str = field(default_factory=_model_dir_from_env)
-    gliner_threshold: float = 0.2
+    gliner_threshold: float = 0.15
     window_words: int = 100
     window_overlap: int = 20
     min_word_len: int = 3
