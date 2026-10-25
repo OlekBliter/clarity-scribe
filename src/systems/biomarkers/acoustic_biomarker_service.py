@@ -69,6 +69,7 @@ class AcousticBiomarkerService:
 
         aggregated_dsp = aggregate_segment_dsp(segment_dsp_results)
         f0_sd_st = aggregated_dsp.pop("f0_sd_st", 0.0)
+        f0_sd_hz_within = aggregated_dsp.pop("f0_sd_hz_within", 0.0)  
 
         speech_rate, pause_ratio, mean_latency = analyze_speech_tempo_and_internal_pauses(
             sound_segments, segments_data
@@ -81,7 +82,8 @@ class AcousticBiomarkerService:
             "mean_latent_response_time_sec": mean_latency
         }
 
-        inferred_dict = compute_inferred_indices(raw_dsp_dict, f0_sd_st)
+        # for a correct comparison send 2 values (f0_sd_st, f0_sd_hz_within)
+        inferred_dict = compute_inferred_indices(raw_dsp_dict, f0_sd_st, f0_sd_hz_within)
 
         window_chunks, dynamics = analyze_windows_and_dynamics(
             sound_mono, segments_data, total_duration, window_sec=self.default_window_sec

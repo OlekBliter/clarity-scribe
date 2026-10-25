@@ -31,7 +31,7 @@ def analyze_segment_pitch_and_quality(sound_segment: parselmouth.Sound) -> Dict[
 
         median_f0 = np.median(f0_voiced)
         if median_f0 > 0:
-            st_values = 12 * np.log2(f0_voiced / median_f0)
+            st_values = 12.0 * np.log2(f0_voiced / median_f0)
             f0_sd_st = float(np.std(st_values))
         else:
             f0_sd_st = 0.0
@@ -81,6 +81,7 @@ def aggregate_segment_dsp(segment_results: List[Dict[str, Any]]) -> Dict[str, fl
             "f0_mean_hz": 0.0,
             "f0_variability_sd": 0.0,
             "f0_sd_st": 0.0,
+            "f0_sd_hz_within": 0.0,
             "jitter_percent": 0.0,
             "shimmer_percent": 0.0,
             "hnr_db": 0.0
@@ -89,19 +90,20 @@ def aggregate_segment_dsp(segment_results: List[Dict[str, Any]]) -> Dict[str, fl
     weights = np.array([r["n_voiced"] for r in valid], dtype=float)
     total_w = np.sum(weights)
 
-    # 1. Mean of F0 (no changes)
+    # 1. Mean of F0
     f0_mean = float(np.sum(np.array([r["f0_mean_hz"] for r in valid]) * weights) / total_w)
-    # 2. Correct SD for F0 (Hz) using pooled variance
-    # Σ n_i * (σ_i² + (μ_i − μ)²) / N
+
+    # 2. Pooled variance for total F0 variability (Session-level)
     variances_hz = [
         w * (r["f0_sd_hz"] ** 2 + (r["f0_mean_hz"] - f0_mean) ** 2)
         for r, w in zip(valid, weights)
     ]
     f0_sd_hz = float(np.sqrt(np.sum(variances_hz) / total_w))
 
-    # 3. For ST mean within-segment variability SD,
-    # since semitones are calculated relative to the median of each individual segment.
+    # 3. Within-segment metrics (ST and Hz)
     f0_sd_st = float(np.sum(np.array([r["f0_sd_st"] for r in valid]) * weights) / total_w)
+    f0_sd_hz_within = float(np.sum(np.array([r["f0_sd_hz"] for r in valid]) * weights) / total_w)
+
     jitter = float(np.sum(np.array([r["jitter"] for r in valid]) * weights) / total_w)
     shimmer = float(np.sum(np.array([r["shimmer"] for r in valid]) * weights) / total_w)
     hnr = float(np.sum(np.array([r["hnr"] for r in valid]) * weights) / total_w)
@@ -110,6 +112,7 @@ def aggregate_segment_dsp(segment_results: List[Dict[str, Any]]) -> Dict[str, fl
         "f0_mean_hz": round(f0_mean, 2),
         "f0_variability_sd": round(f0_sd_hz, 2),
         "f0_sd_st": round(f0_sd_st, 2),
+        "f0_sd_hz_within": round(f0_sd_hz_within, 2),
         "jitter_percent": round(jitter, 2),
         "shimmer_percent": round(shimmer, 2),
         "hnr_db": round(hnr, 2)
