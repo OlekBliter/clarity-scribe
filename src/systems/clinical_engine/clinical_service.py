@@ -7,7 +7,8 @@ from .prompt_manager import PromptManager
 
 SRC_DIR = Path(__file__).resolve().parents[2]
 if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+    (sys
+     .path.insert(0, str(SRC_DIR)))
 from schemas import contracts
 
 class ClinicalService:
@@ -66,3 +67,12 @@ class ClinicalService:
             schema=list[contracts.PlanItem]
         )
         return {"plan": res}
+    def generate_medical_card(self, transcription_path :Path| str)->dict:
+        prompt = self.prompt_manager.get_prompt(
+            prompt_name="client_card",
+            transcription=transcription_path)
+        res = self.llm.query(
+            prompt=prompt,
+            schema=contracts.S3Out
+        )
+        return res
