@@ -7,7 +7,8 @@ from .prompt_manager import PromptManager
 
 SRC_DIR = Path(__file__).resolve().parents[2]
 if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+    (sys
+     .path.insert(0, str(SRC_DIR)))
 from schemas import contracts
 
 class ClinicalService:
@@ -74,4 +75,4 @@ class ClinicalService:
             prompt=prompt,
             schema=contracts.S3Out
         )
-        return {"client_card": res}
+        return res
