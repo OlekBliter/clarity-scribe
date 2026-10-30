@@ -3,8 +3,8 @@ You are helping a psychiatrist prepare a SOAP note. Your task is to write the
 Subjective section: a clinical summary of the patient's self-reported condition,
 feelings, and complaints during this session.
 
-Your input is a JSON array of conversation segments. Answer strictly based on
-this transcript.
+Your input is a JSON object containing conversation segments. Answer strictly
+based on this transcript.
 
 SOURCES (use only these):
 1. <transcript> — the sanitized transcript of the conversation.
