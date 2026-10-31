@@ -98,7 +98,7 @@ class MockLLM(LLM):
         self.responses = responses
         self.called_prompts: list[str] = []
 
-    def query(self, prompt: str, context_json_path=None, schema=None) -> str:
+    def query(self, prompt: str, schema=None) -> str:
         # Record prompts sent to the engine
         self.called_prompts.append(prompt)
 
@@ -110,9 +110,6 @@ class MockLLM(LLM):
         elif schema == Assessment:
             return self.responses.get("assessment", "{}")
         return self.responses.get("plan", "[]")
-
-    def set_response_schema(self, response_schema=None):
-        pass
 
 
 @pytest.fixture
@@ -160,8 +157,8 @@ def test_clinical_service_generates_and_merges_soap_dict(tmp_path, sample_mock_r
     )
 
     result_dict = service.generate_soap_note(
-        transcription_path="mock_transcription.json",
-        biomarkers_path="mock_biomarkers.json"
+        transcription="mock_transcription.json",
+        biomarkers="mock_biomarkers.json"
     )
 
     # Ensure all four sections are present in the aggregated dictionary
@@ -170,13 +167,8 @@ def test_clinical_service_generates_and_merges_soap_dict(tmp_path, sample_mock_r
     assert "assessment" in result_dict
     assert "plan" in result_dict
 
-    # Reconstruct and validate the complete S4Out model
-    structured_note = S4Out(
-        subjective=Subjective.model_validate_json(result_dict["subjective"]),
-        objective=Objective.model_validate_json(result_dict["objective"]),
-        assessment=Assessment.model_validate_json(result_dict["assessment"]),
-        plan=[PlanItem.model_validate(p) for p in json.loads(result_dict["plan"])]
-    )
+    # The service returns a fully validated, JSON-compatible S4Out payload.
+    structured_note = S4Out.model_validate(result_dict)
 
     assert structured_note.subjective.source_segments == [2, 4]
     assert structured_note.plan[0].text == "Recommend daily mood tracking"

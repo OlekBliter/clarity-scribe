@@ -1,4 +1,5 @@
 import os
+import math
 import parselmouth
 from typing import Dict, Any, Optional
 
@@ -50,8 +51,11 @@ class AcousticBiomarkerService:
         segment_dsp_results = []
 
         for seg in segments_data:
-            start_t = seg.get("start_time", 0.0)
-            end_t = seg.get("end_time", 0.0)
+            if not isinstance(seg, dict):
+                raise InvalidSegmentError("Each segment must be a dictionary.")
+
+            start_t = seg.get("start_time")
+            end_t = seg.get("end_time")
 
             if start_t >= end_t:
                 continue
@@ -68,6 +72,10 @@ class AcousticBiomarkerService:
                     raise AudioProcessingError(f"Error extracting segment ({start_t}-{end_t}): {e}") from e
 
         aggregated_dsp = aggregate_segment_dsp(segment_dsp_results)
+        if not any(result.get("n_voiced", 0) > 0 for result in segment_dsp_results):
+            raise AudioProcessingError(
+                "No valid voiced material was found for biomarker extraction."
+            )
         f0_sd_st = aggregated_dsp.pop("f0_sd_st", 0.0)
         f0_sd_hz_within = aggregated_dsp.pop("f0_sd_hz_within", 0.0)  
 
@@ -89,9 +97,10 @@ class AcousticBiomarkerService:
             sound_mono, segments_data, total_duration, window_sec=self.default_window_sec
         )
 
-        return {
+        inferred_dict["intrasession_dynamics"] = dynamics
+        result = {
             "raw_dsp_features": raw_dsp_dict,
             "inferred_indices": inferred_dict,
-            "intrasession_dynamics": dynamics,
             "window_chunks": window_chunks
         }
+        return result
