@@ -56,28 +56,20 @@ class AcousticBiomarkerService:
 
             start_t = seg.get("start_time")
             end_t = seg.get("end_time")
-            if (
-                isinstance(start_t, bool)
-                or isinstance(end_t, bool)
-                or not isinstance(start_t, (int, float))
-                or not isinstance(end_t, (int, float))
-                or not math.isfinite(start_t)
-                or not math.isfinite(end_t)
-                or start_t < 0
-                or end_t <= start_t
-                or start_t >= total_duration
-                or end_t > total_duration
-            ):
-                raise InvalidSegmentError(
-                    f"Invalid segment timestamps: start_time={start_t}, end_time={end_t}."
-                )
 
-            try:
-                part = sound_mono.extract_part(from_time=start_t, to_time=end_t)
-                sound_segments.append(part)
-                segment_dsp_results.append(analyze_segment_pitch_and_quality(part))
-            except Exception as e:
-                raise AudioProcessingError(f"Error extracting segment ({start_t}-{end_t}): {e}") from e
+            if start_t >= end_t:
+                continue
+
+            if start_t < total_duration:
+                try:
+                    part = sound_mono.extract_part(
+                        from_time=max(0.0, start_t),
+                        to_time=min(total_duration, end_t)
+                    )
+                    sound_segments.append(part)
+                    segment_dsp_results.append(analyze_segment_pitch_and_quality(part))
+                except Exception as e:
+                    raise AudioProcessingError(f"Error extracting segment ({start_t}-{end_t}): {e}") from e
 
         aggregated_dsp = aggregate_segment_dsp(segment_dsp_results)
         if not any(result.get("n_voiced", 0) > 0 for result in segment_dsp_results):
