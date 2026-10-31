@@ -17,10 +17,10 @@ CREATE TABLE sessions (
   session_number     INTEGER NOT NULL,          -- max+1 per patient; 1 = first visit
   session_date       TEXT NOT NULL,             -- YYYY-MM-DD
   audio_path         TEXT NOT NULL,             -- two-channel recording
-  patient_audio_path TEXT,                      -- patient.wav, written by System 1
+  patient_audio_path TEXT,                      -- patient.wav, written by the Audio Transcription system
   channel_map        TEXT NOT NULL DEFAULT '{"DOCTOR":0,"PATIENT":1}',
   language           TEXT,                      -- 'uk' | 'en'
-  transcript_meta    TEXT,                      -- JSON: duration and speaking time metadata from S1.out
+  transcript_meta    TEXT,                      -- JSON: duration and speaking time metadata from the Audio Transcription system
   ner_map            TEXT,                      -- JSON map; stored locally only
   status             TEXT NOT NULL DEFAULT 'uploaded'      -- last COMPLETED pipeline step
                      CHECK (status IN ('uploaded','transcribed','sanitized','analyzed','drafted','approved')),
@@ -42,15 +42,15 @@ CREATE TABLE transcript_segments (
 );
 CREATE TABLE biomarkers (
   session_id TEXT PRIMARY KEY REFERENCES sessions,
-  data       TEXT NOT NULL CHECK (json_valid(data))     -- complete S2 output
+  data       TEXT NOT NULL CHECK (json_valid(data))     -- complete output from the Biomarker Extraction system
 );
 CREATE TABLE medical_cards (
   patient_id        TEXT PRIMARY KEY REFERENCES patients,   -- one card per patient
   source_session_id TEXT NOT NULL REFERENCES sessions,      -- source session
   status            TEXT NOT NULL DEFAULT 'generated'
                     CHECK (status IN ('generated','draft','approved')),  -- generated: raw output with placeholders; draft: after restore
-  draft             TEXT CHECK (json_valid(draft)),         -- restored S3 output, not edited; NULL when S3 is disabled
-  data              TEXT CHECK (json_valid(data)),          -- working card: optional S3 fields, doctor fields, and edits
+  draft             TEXT CHECK (json_valid(draft)),         -- restored output from the Clinical Card Generation system; NULL when disabled
+  data              TEXT CHECK (json_valid(data)),          -- working card: generated fields, doctor fields, and edits
   review_started_at TEXT,
   approved_at       TEXT
 );
@@ -58,8 +58,8 @@ CREATE TABLE soap_notes (
   session_id        TEXT PRIMARY KEY REFERENCES sessions,   -- one note per session
   status            TEXT NOT NULL DEFAULT 'generated'
                     CHECK (status IN ('generated','draft','approved')),  -- generated: raw output with placeholders; draft: after restore
-  draft             TEXT CHECK (json_valid(draft)),         -- restored S4 output, not edited
-  final             TEXT CHECK (json_valid(final)),         -- working S4.out copy with doctor edits
+  draft             TEXT CHECK (json_valid(draft)),         -- restored output from the SOAP Note Generation system, not edited
+  final             TEXT CHECK (json_valid(final)),         -- working SOAP note with doctor edits
   review_started_at TEXT,
   approved_at       TEXT
 );
