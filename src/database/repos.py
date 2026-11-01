@@ -77,6 +77,8 @@ def _decode_session(row: sqlite3.Row) -> dict[str, Any]:
 
 
 class PatientsRepo:
+    """Persist patient records and patient-session summaries."""
+
     def create(self, conn: sqlite3.Connection, contacts: dict[str, Any]) -> str:
         if not isinstance(contacts, dict):
             raise UserInputError("Patient contacts must be a dictionary.")
@@ -91,6 +93,13 @@ class PatientsRepo:
             if not isinstance(consent, (bool, int)) or consent not in (0, 1):
                 raise UserInputError("emergency_consent must be a boolean, 0, or 1.")
             values["emergency_consent"] = int(consent)
+        values = {
+            field: value.strip() if isinstance(value, str) else value
+            for field, value in values.items()
+        }
+        values = {
+            field: None if value == "" else value for field, value in values.items()
+        }
 
         try:
             conn.execute(
@@ -130,6 +139,13 @@ class PatientsRepo:
             if not isinstance(consent, (bool, int)) or consent not in (0, 1):
                 raise UserInputError("emergency_consent must be a boolean, 0, or 1.")
             values["emergency_consent"] = int(consent)
+        values = {
+            field: value.strip() if isinstance(value, str) else value
+            for field, value in values.items()
+        }
+        values = {
+            field: None if value == "" else value for field, value in values.items()
+        }
         assignments = ", ".join(f"{field} = ?" for field in values)
         try:
             cursor = conn.execute(
@@ -162,7 +178,7 @@ class PatientsRepo:
         for patient in patients:
             sessions = conn.execute(
                 """
-                SELECT status, failed_step, session_date
+                SELECT session_id, status, failed_step, session_date
                 FROM sessions
                 WHERE patient_id = ?
                 ORDER BY session_number
@@ -175,7 +191,11 @@ class PatientsRepo:
                 (row["session_date"] for row in sessions), default=None
             )
             item["sessions"] = [
-                {"status": row["status"], "failed_step": row["failed_step"]}
+                {
+                    "session_id": row["session_id"],
+                    "status": row["status"],
+                    "failed_step": row["failed_step"],
+                }
                 for row in sessions
             ]
             result.append(item)
@@ -183,6 +203,8 @@ class PatientsRepo:
 
 
 class SessionsRepo:
+    """Persist consultation sessions and their pipeline state."""
+
     def create(
         self,
         conn: sqlite3.Connection,
@@ -289,18 +311,24 @@ class SessionsRepo:
     def set_failure(
         self, conn: sqlite3.Connection, session_id: str, step: str, error: str
     ) -> None:
-        cursor = conn.execute(
-            "UPDATE sessions SET failed_step = ?, error = ? WHERE session_id = ?",
-            (step, error, session_id),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET failed_step = ?, error = ? WHERE session_id = ?",
+                (step, error, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to save session failure.") from database_error
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
     def clear_failure(self, conn: sqlite3.Connection, session_id: str) -> None:
-        cursor = conn.execute(
-            "UPDATE sessions SET failed_step = NULL, error = NULL WHERE session_id = ?",
-            (session_id,),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET failed_step = NULL, error = NULL WHERE session_id = ?",
+                (session_id,),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to clear session failure.") from database_error
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
@@ -313,14 +341,17 @@ class SessionsRepo:
         patient_audio_path: str | None,
     ) -> None:
         meta = _dump_json("sessions", "transcript_meta", transcript_meta)
-        cursor = conn.execute(
-            """
-            UPDATE sessions
-            SET language = ?, transcript_meta = ?, patient_audio_path = ?
-            WHERE session_id = ?
-            """,
-            (language, meta, patient_audio_path, session_id),
-        )
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE sessions
+                SET language = ?, transcript_meta = ?, patient_audio_path = ?
+                WHERE session_id = ?
+                """,
+                (language, meta, patient_audio_path, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to save transcription result.") from database_error
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
@@ -328,10 +359,13 @@ class SessionsRepo:
         self, conn: sqlite3.Connection, session_id: str, ner_map: dict[str, Any]
     ) -> None:
         value = _dump_json("sessions", "ner_map", ner_map)
-        cursor = conn.execute(
-            "UPDATE sessions SET ner_map = ? WHERE session_id = ?",
-            (value, session_id),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET ner_map = ? WHERE session_id = ?",
+                (value, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to save NER map.") from database_error
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
@@ -360,10 +394,27 @@ class SessionsRepo:
     def update_audio_path(
         self, conn: sqlite3.Connection, session_id: str, path: str
     ) -> None:
-        cursor = conn.execute(
-            "UPDATE sessions SET audio_path = ? WHERE session_id = ?",
-            (path, session_id),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET audio_path = ? WHERE session_id = ?",
+                (path, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to update session audio path.") from database_error
+        if cursor.rowcount == 0:
+            raise RecordNotFoundError(f"Session '{session_id}' was not found.")
+
+    def update_language(
+        self, conn: sqlite3.Connection, session_id: str, language: str
+    ) -> None:
+        """Update the language selected for a session retry."""
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET language = ? WHERE session_id = ?",
+                (language, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to update session language.") from database_error
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
@@ -377,10 +428,15 @@ class SessionsRepo:
 
 
 class TranscriptRepo:
+    """Persist raw and sanitized transcript segments."""
+
     def replace_segments(
         self, conn: sqlite3.Connection, session_id: str, segments: Iterable[dict[str, Any]]
     ) -> None:
-        validated = [S1Segment.model_validate(segment) for segment in segments]
+        try:
+            validated = [S1Segment.model_validate(segment) for segment in segments]
+        except ValidationError as error:
+            raise RepositoryError("Invalid transcript segment payload.") from error
         conn.execute("DELETE FROM transcript_segments WHERE session_id = ?", (session_id,))
         try:
             conn.executemany(
@@ -443,6 +499,17 @@ class TranscriptRepo:
 
 
 class BiomarkersRepo:
+    """Persist validated biomarker results."""
+
+    def find(self, conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
+        """Return biomarkers for a session, or None when not generated."""
+        row = conn.execute(
+            "SELECT data FROM biomarkers WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return _plain(_load_json("biomarkers", "data", row["data"]))
+
     def upsert(self, conn: sqlite3.Connection, session_id: str, data: dict[str, Any]) -> None:
         value = _dump_json("biomarkers", "data", data)
         try:
@@ -490,6 +557,20 @@ class BiomarkersRepo:
 
 
 class MedicalCardsRepo:
+    """Persist generated, editable, and approved medical cards."""
+
+    def find(self, conn: sqlite3.Connection, patient_id: str) -> dict[str, Any] | None:
+        """Return a patient's medical card, or None when it does not exist."""
+        row = conn.execute(
+            "SELECT * FROM medical_cards WHERE patient_id = ?", (patient_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["draft"] = _plain(_load_json("medical_cards", "draft", result["draft"]))
+        result["data"] = _plain(_load_json("medical_cards", "data", result["data"]))
+        return result
+
     def get(self, conn: sqlite3.Connection, patient_id: str) -> dict[str, Any]:
         row = conn.execute(
             "SELECT * FROM medical_cards WHERE patient_id = ?", (patient_id,)
@@ -507,7 +588,7 @@ class MedicalCardsRepo:
         raw: dict[str, Any],
     ) -> None:
         value = _dump_json("medical_cards", "draft", raw)
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO medical_cards (patient_id, source_session_id, status, draft, data)
             VALUES (?, ?, 'generated', ?, NULL)
@@ -518,9 +599,13 @@ class MedicalCardsRepo:
                 data = NULL,
                 review_started_at = NULL,
                 approved_at = NULL
+            WHERE medical_cards.status != 'approved'
             """,
             (patient_id, source_session_id, value),
         )
+        if cursor.rowcount == 0:
+            self.get(conn, patient_id)
+            raise UserInputError("Approved medical card cannot be regenerated.")
 
     def save_restored(
         self, conn: sqlite3.Connection, patient_id: str, restored: dict[str, Any]
@@ -546,23 +631,29 @@ class MedicalCardsRepo:
             """
             UPDATE medical_cards
             SET draft = ?, data = ?, status = 'draft'
-            WHERE patient_id = ?
+            WHERE patient_id = ? AND status = 'generated'
             """,
             (draft, data, patient_id),
         )
         if cursor.rowcount == 0:
-            raise RecordNotFoundError(f"Medical card for patient '{patient_id}' was not found.")
+            self.get(conn, patient_id)
+            raise UserInputError("Medical card must be in generated status before restoring.")
 
     def save_edits(
         self, conn: sqlite3.Connection, patient_id: str, data: dict[str, Any]
     ) -> None:
         value = _dump_json("medical_cards", "data", data)
         cursor = conn.execute(
-            "UPDATE medical_cards SET data = ?, status = 'draft' WHERE patient_id = ?",
+            """
+            UPDATE medical_cards
+            SET data = ?
+            WHERE patient_id = ? AND status = 'draft'
+            """,
             (value, patient_id),
         )
         if cursor.rowcount == 0:
-            raise RecordNotFoundError(f"Medical card for patient '{patient_id}' was not found.")
+            self.get(conn, patient_id)
+            raise UserInputError("Medical card must be in draft status before editing.")
 
     def set_review_started(
         self, conn: sqlite3.Connection, patient_id: str, at: str
@@ -596,6 +687,20 @@ class MedicalCardsRepo:
 
 
 class SoapNotesRepo:
+    """Persist generated, editable, and approved SOAP notes."""
+
+    def find(self, conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
+        """Return a session's SOAP note, or None when it does not exist."""
+        row = conn.execute(
+            "SELECT * FROM soap_notes WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["draft"] = _plain(_load_json("soap_notes", "draft", result["draft"]))
+        result["final"] = _plain(_load_json("soap_notes", "final", result["final"]))
+        return result
+
     def get(self, conn: sqlite3.Connection, session_id: str) -> dict[str, Any]:
         row = conn.execute(
             "SELECT * FROM soap_notes WHERE session_id = ?", (session_id,)
@@ -609,7 +714,7 @@ class SoapNotesRepo:
         self, conn: sqlite3.Connection, session_id: str, raw: dict[str, Any]
     ) -> None:
         value = _dump_json("soap_notes", "draft", raw)
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO soap_notes (session_id, status, draft, final)
             VALUES (?, 'generated', ?, NULL)
@@ -619,9 +724,13 @@ class SoapNotesRepo:
                 final = NULL,
                 review_started_at = NULL,
                 approved_at = NULL
+            WHERE soap_notes.status != 'approved'
             """,
             (session_id, value),
         )
+        if cursor.rowcount == 0:
+            self.get(conn, session_id)
+            raise UserInputError("Approved SOAP note cannot be regenerated.")
 
     def save_restored(
         self, conn: sqlite3.Connection, session_id: str, restored: dict[str, Any]
@@ -631,23 +740,29 @@ class SoapNotesRepo:
             """
             UPDATE soap_notes
             SET draft = ?, final = ?, status = 'draft'
-            WHERE session_id = ?
+            WHERE session_id = ? AND status = 'generated'
             """,
             (value, value, session_id),
         )
         if cursor.rowcount == 0:
-            raise RecordNotFoundError(f"SOAP note for session '{session_id}' was not found.")
+            self.get(conn, session_id)
+            raise UserInputError("SOAP note must be in generated status before restoring.")
 
     def save_edits(
         self, conn: sqlite3.Connection, session_id: str, final: dict[str, Any]
     ) -> None:
         value = _dump_json("soap_notes", "final", final)
         cursor = conn.execute(
-            "UPDATE soap_notes SET final = ?, status = 'draft' WHERE session_id = ?",
+            """
+            UPDATE soap_notes
+            SET final = ?
+            WHERE session_id = ? AND status = 'draft'
+            """,
             (value, session_id),
         )
         if cursor.rowcount == 0:
-            raise RecordNotFoundError(f"SOAP note for session '{session_id}' was not found.")
+            self.get(conn, session_id)
+            raise UserInputError("SOAP note must be in draft status before editing.")
 
     def set_review_started(
         self, conn: sqlite3.Connection, session_id: str, at: str
