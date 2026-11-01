@@ -3,3 +3,5 @@ pydub==0.25.1
 audioop-lts==0.2.2; python_version >= "3.13"
 silero_vad==6.2.3
 torchaudio==2.11.0
+punctuators==0.0.7
+onnxruntime==1.31.1

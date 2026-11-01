@@ -141,8 +141,8 @@ def test_get_transcription_result_structure_and_rounding(mock_deps, pipeline):
 
     # 1. Check calls to the dependencies
     assert mock_deps.recognize_words.call_count == 2
-    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["DOCTOR"], mock_deps.model, "DOCTOR")
-    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["PATIENT"], mock_deps.model, "PATIENT")
+    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["DOCTOR"], mock_deps.model, "DOCTOR", False)
+    mock_deps.recognize_words.assert_any_call(mock_deps.tracks["PATIENT"], mock_deps.model, "PATIENT", False)
     mock_deps.create_output_segments.assert_called_once()
     mock_deps.collect_metadata.assert_called_once_with(mock_deps.segments, mock_deps.tracks["DOCTOR"])
 
