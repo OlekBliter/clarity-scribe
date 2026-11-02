@@ -1,8 +1,8 @@
 from functools import lru_cache
 from pydub import AudioSegment
+from .audio_normalization import normalize_audio
 from pathlib import Path
 from vosk import Model, KaldiRecognizer
-from .channel_splitter import split
 import json
 from dotenv import load_dotenv
 import os
@@ -52,18 +52,24 @@ def load_model(model_path = model_dir) -> Model:
 
     return Model(str(path))
 
-def recognize_words(audio: AudioSegment, model: Model, speaker: str) -> list[dict]:
+def recognize_words(audio: AudioSegment, model: Model, speaker: str, punctuate: bool = False) -> list[dict]:
     """
     Transcribe one mono track and return its text grouped into segments.
-
+ 
     Args:
         audio: Mono, 16-bit track (the recognizer is created with its frame rate).
         model: Loaded Vosk model.
         speaker: Role label attached to every resulting segment.
-
+        punctuate: If True, restore punctuation and capitalization in the text
+            of every segment. Requires the optional `punctuators` package
+            (imported only when this flag is set). A segment keeps its original
+            text if the punctuator changes its number of words. Timestamps,
+            speaker and confidence are never modified.
+ 
     Returns:
         A list of segment dicts (see group_words).
     """
+    audio = normalize_audio(audio)
     rec = KaldiRecognizer(model, audio.frame_rate)
     rec.SetWords(True)
     step = 4000 * audio.frame_width
@@ -73,8 +79,17 @@ def recognize_words(audio: AudioSegment, model: Model, speaker: str) -> list[dic
         if rec.AcceptWaveform(raw[i:i + step]):
             words += json.loads(rec.Result()).get("result", [])
     words += json.loads(rec.FinalResult()).get("result", [])
+    group = group_words(words, speaker)
 
-    return group_words(words, speaker)
+    if punctuate:
+        from .punctuation import restore_punctuation
+
+        texts = restore_punctuation([g["text"] for g in group])
+        for g, text in zip(group, texts):
+            if len(text.split()) == len(g["text"].split()):
+                g["text"] = text
+
+    return group
 
 def get_audio_duration_sec(audio: AudioSegment) -> float:
     """Return the duration of the audio in seconds (pydub gives it as a float)."""
@@ -148,7 +163,7 @@ def create_output_segments(segments_patient: list[dict], segments_doctor: list[d
     ordered by start time. Overlapping speech is kept (segments may overlap).
     """
     full_segments = segments_patient + segments_doctor
-    full_segments.sort(key=lambda s: s["start"])
+    full_segments.sort(key=lambda s: (s["start"], s["end"]))
 
     return [Segment(segment_id = i, 
                     speaker = full_segments[i]["speaker"],
@@ -188,33 +203,4 @@ def collect_metadata(segments: list[Segment], audio: AudioSegment) -> dict:
         "doctor_speaking_time_sec": doctor_speaking_time_sec,
         "patient_speaking_time_sec": patient_speaking_time_sec,
         "silence_time_sec": silence_time_sec,
-    }
-    
-def transcription(audio_path: str, channel_map: dict[str, int]) -> dict:
-    """
-    Run the full S1 pipeline: split channels -> recognize each speaker -> merge -> metadata.
-
-    Args:
-        audio_path: Path to the stereo recording (one speaker per channel).
-        channel_map: Role -> channel index, e.g. {"DOCTOR": 0, "PATIENT": 1}.
-            Keys must be exactly "DOCTOR" and "PATIENT" (collect_metadata
-            compares against "PATIENT").
-        language: Language code copied into the output.
-
-    Returns:
-        A JSON-serializable dict: {"language", "metadata", "segments"}.
-    """
-    tracks = split(audio_path, channel_map)
-    model = load_model()
-
-    segments_doctor = recognize_words(tracks["DOCTOR"], model, "DOCTOR")
-    segments_patient = recognize_words(tracks["PATIENT"], model, "PATIENT")
-
-    segments = create_output_segments(segments_patient, segments_doctor)
-
-    metadata = collect_metadata(segments, tracks["DOCTOR"])
-
-    return {
-        "metadata": {key: round(value, 2) for key, value in metadata.items()},
-        "segments": [vars(segment) for segment in segments],
     }

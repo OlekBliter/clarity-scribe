@@ -1,4 +1,5 @@
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
+from .audio_normalization import normalize_audio
 from functools import lru_cache
 import numpy as np
 import torch
@@ -33,6 +34,7 @@ def get_timestamps(audio: AudioSegment) -> list[dict[str, float]]:
     Raises:
         ValueError: If the audio format is not supported by the model.
     """
+    audio = normalize_audio(audio)
     if audio.channels != 1 or audio.sample_width != 2 or audio.frame_rate not in (8000, 16000):
         raise ValueError("Mono, 16-bit audio at 8 or 16 kHz is required")
     model = load_model()

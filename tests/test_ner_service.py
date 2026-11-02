@@ -14,6 +14,15 @@ class FakeMorphology:
     def keys(self, word):
         return frozenset({word.lower()})
 
+    def is_closed_class(self, word):
+        return False
+
+    def is_function_word(self, word):
+        return False
+
+    def has_name_grammeme(self, word):
+        return False
+
     def case_before(self, preceding_text, is_person):
         return "nomn"
 

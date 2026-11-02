@@ -61,16 +61,22 @@ class AudioTranscriptionService:
 
         return stitched
 
-    def get_transcription_result(self, tracks: dict[str, AudioSegment]) -> dict:
+    def get_transcription_result(self, tracks: dict[str, AudioSegment], punctuate: bool = False) -> dict:
         """
         Transcribe both speakers:
         {"language": ..., "metadata": {...}, "segments": [...]}.
 
         Recognition runs on the ORIGINAL tracks (not the VAD-stitched one),
         so start_time / end_time match the real recording timeline.
+
+        Args:
+            tracks: Per-role tracks from load_tracks().
+            punctuate: If True, restore punctuation and capitalization in every
+                segment (requires the optional `punctuators` package). Defaults
+                to False, in which case the text is lowercase without punctuation.
         """
-        segments_doctor = recognize_words(tracks["DOCTOR"], self._model, "DOCTOR")
-        segments_patient = recognize_words(tracks["PATIENT"], self._model, "PATIENT")
+        segments_doctor = recognize_words(tracks["DOCTOR"], self._model, "DOCTOR", punctuate)
+        segments_patient = recognize_words(tracks["PATIENT"], self._model, "PATIENT", punctuate)
 
         segments = create_output_segments(segments_patient, segments_doctor)
         metadata = collect_metadata(segments, tracks["DOCTOR"])

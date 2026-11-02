@@ -67,7 +67,6 @@ class ClinicalService:
             schema=list[contracts.PlanItem]
         )
         return {"plan": res}
-
     def generate_medical_card(self, transcription_path :Path| str)->dict:
         prompt = self.prompt_manager.get_prompt(
             prompt_name="client_card",
