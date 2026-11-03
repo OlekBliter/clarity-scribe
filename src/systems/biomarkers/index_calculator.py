@@ -1,6 +1,4 @@
 from typing import Dict, Any
-from .exceptions import AcousticBiomarkerError
-
 def compute_inferred_indices(raw_dsp: Dict[str, Any], f0_sd_st: float, f0_sd_hz_within: float) -> Dict[str, Any]:
     """
     Computes clinical psychomotor indices and affect indicators from raw acoustic features.
@@ -13,7 +11,6 @@ def compute_inferred_indices(raw_dsp: Dict[str, Any], f0_sd_st: float, f0_sd_hz_
     Returns:
         Dict containing calculated indices and flags (affect_flatness_flag, vocal_jitter_percentile, psychomotor_retardation_index).
     """
-    f0_sd_hz = raw_dsp["f0_variability_sd"]
     jitter = raw_dsp["jitter_percent"]
     pause_ratio = raw_dsp["pause_ratio"]
     latency = raw_dsp["mean_latent_response_time_sec"]

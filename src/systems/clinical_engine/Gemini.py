@@ -1,19 +1,12 @@
-import os
-import sys
-
 from .LLM import LLM
 from pydantic import BaseModel
 from google import genai
 from typing import Any, Optional
-from pathlib import Path
 
 from google.genai.errors import ServerError, APIError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-from schemas import contracts
+from src.schemas import contracts
 
 from dotenv import load_dotenv
 
