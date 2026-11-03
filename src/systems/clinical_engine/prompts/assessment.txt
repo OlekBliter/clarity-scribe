@@ -24,9 +24,10 @@ RULES
 4. Write in Ukrainian, in a formal clinical style, 2-4 sentences.
 
 OUTPUT FORMAT
-Return a JSON object with:
+Return valid JSON only, with exactly these keys:
 - "text": string (the assessment text)
-- "basis": string (must be exactly "doctor_stated" or "model_synthesis")
+- "basis": "doctor_stated" or "model_synthesis"
+Do not add any other keys or wrap the JSON in Markdown fences.
 
 === USER ===
 <subjective>

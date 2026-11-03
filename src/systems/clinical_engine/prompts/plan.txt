@@ -16,7 +16,8 @@ This separation is the most important requirement. A wrong "doctor_stated"
 label puts words in the doctor's mouth.
 
 SOURCES (use only these):
-- <transcript>: sanitized conversation, one line per utterance: [segment_id] SPEAKER: text
+- <transcript>: sanitized conversation as a JSON object or array of segments.
+  Each segment has an integer segment_id, a speaker, and text.
 - <biomarkers>: acoustic features of the patient's voice (JSON), optional
 - <assessment>: the Assessment section already written for this note, optional
 
@@ -58,7 +59,11 @@ FORMAT RULES
     any other field: only the doctor sets "confirmed" later.
 
 RESPONSE FORMAT
-JSON only, with no explanations and no markdown.
+Return a JSON array only. Each item must contain exactly these keys:
+- "text": string
+- "origin": "doctor_stated" or "recommended"
+Do not add "confirmed", a topic key, or any other field. Do not wrap the JSON in
+Markdown fences.
 
 
 === USER ===

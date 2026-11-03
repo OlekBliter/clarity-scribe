@@ -4,7 +4,7 @@ class AcousticBiomarkerError(Exception):
 
 
 class AudioFileNotFoundError(AcousticBiomarkerError):
-    """Raised when the specified patient audio file does not exist or is unreadable."""
+    """Raised when the specified source audio file does not exist or is unreadable."""
     pass
 
 
