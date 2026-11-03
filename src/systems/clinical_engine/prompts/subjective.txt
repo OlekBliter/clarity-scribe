@@ -42,6 +42,12 @@ source_segments — an array of exact 'segment_id' integers from the <transcript
 that you used to form the subjective summary. Only include IDs of the segments 
 where the speaker is "PATIENT".
 
+OUTPUT FORMAT
+Return valid JSON only, with exactly these keys:
+- "text": string
+- "source_segments": an array of integer segment IDs
+Do not add any other keys or wrap the JSON in Markdown fences.
+
 === USER ===
 <transcript>
 {transcription}

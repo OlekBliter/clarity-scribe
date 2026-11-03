@@ -61,6 +61,12 @@ mean_latent_response_time_sec, affect_flatness_flag, vocal_jitter_percentile,
 psychomotor_retardation_index. Do not invent other keys. Every feature whose
 value appears in the text must be listed.
 
+OUTPUT FORMAT
+Return valid JSON only, with exactly these keys:
+- "text": string
+- "biomarker_refs": an array of strings from the allowed feature list
+Do not add any other keys or wrap the JSON in Markdown fences.
+
 === USER ===
 <biomarkers>
 {biomarkers}

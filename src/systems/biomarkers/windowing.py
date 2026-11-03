@@ -26,6 +26,8 @@ def analyze_windows_and_dynamics(
     """
     if window_sec is None:
         window_sec = 300.0 if total_duration_sec >= 1200.0 else 180.0
+    elif window_sec <= 0:
+        raise ValueError("window_sec must be positive.")
 
     chunks: List[Dict[str, Any]] = []
     num_windows = int(np.ceil(total_duration_sec / window_sec)) if total_duration_sec > 0 else 0

@@ -17,9 +17,8 @@ CREATE TABLE sessions (
   session_number     INTEGER NOT NULL,          -- max+1 per patient; 1 = first visit
   session_date       TEXT NOT NULL,             -- YYYY-MM-DD
   audio_path         TEXT NOT NULL,             -- two-channel recording
-  patient_audio_path TEXT,                      -- patient.wav, written by the Audio Transcription system
   channel_map        TEXT NOT NULL DEFAULT '{"DOCTOR":0,"PATIENT":1}',
-  language           TEXT,                      -- 'uk' | 'en'
+  language           TEXT,                      -- language hint/code
   transcript_meta    TEXT,                      -- JSON: duration and speaking time metadata from the Audio Transcription system
   ner_map            TEXT,                      -- JSON map; stored locally only
   status             TEXT NOT NULL DEFAULT 'uploaded'      -- last COMPLETED pipeline step

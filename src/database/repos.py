@@ -23,6 +23,7 @@ _PATIENT_CONTACT_FIELDS = (
     "emergency_phone",
     "emergency_consent",
 )
+_REQUIRED_CHANNEL_ROLES = frozenset({"DOCTOR", "PATIENT"})
 
 
 def _now() -> str:
@@ -52,6 +53,11 @@ def _load_json(table: str, column: str, value: str | None) -> Any:
         return load_column(table, column, value)
     except (TypeError, ValueError, ValidationError) as error:
         raise RepositoryError(f"Invalid JSON stored in {table}.{column}.") from error
+
+
+def _validate_session_inputs(channel_map: dict[str, int]) -> None:
+    if not isinstance(channel_map, dict) or not _REQUIRED_CHANNEL_ROLES <= channel_map.keys():
+        raise UserInputError("channel_map must contain DOCTOR and PATIENT roles.")
 
 
 def _plain(value: Any) -> Any:
@@ -215,6 +221,7 @@ class SessionsRepo:
         channel_map: dict[str, int],
         language: str,
     ) -> str:
+        _validate_session_inputs(channel_map)
         session_id = str(uuid.uuid4())
         try:
             conn.execute(
@@ -338,17 +345,16 @@ class SessionsRepo:
         session_id: str,
         language: str,
         transcript_meta: dict[str, Any],
-        patient_audio_path: str | None,
     ) -> None:
         meta = _dump_json("sessions", "transcript_meta", transcript_meta)
         try:
             cursor = conn.execute(
                 """
                 UPDATE sessions
-                SET language = ?, transcript_meta = ?, patient_audio_path = ?
+                SET language = ?, transcript_meta = ?
                 WHERE session_id = ?
                 """,
-                (language, meta, patient_audio_path, session_id),
+                (language, meta, session_id),
             )
         except sqlite3.Error as database_error:
             raise RepositoryError("Failed to save transcription result.") from database_error
@@ -371,6 +377,10 @@ class SessionsRepo:
 
     def reset_pipeline(self, conn: sqlite3.Connection, session_id: str) -> None:
         session = self.get(conn, session_id)
+        if session["status"] == "approved":
+            raise UserInputError(
+                "Approved sessions cannot be reset. Use the controlled correction process."
+            )
         SoapNotesRepo().delete(conn, session_id)
         BiomarkersRepo().delete(conn, session_id)
         TranscriptRepo().delete(conn, session_id)
@@ -384,7 +394,7 @@ class SessionsRepo:
         conn.execute(
             """
             UPDATE sessions
-            SET patient_audio_path = NULL, transcript_meta = NULL, ner_map = NULL,
+            SET transcript_meta = NULL, ner_map = NULL,
                 failed_step = NULL, error = NULL, status = 'uploaded'
             WHERE session_id = ?
             """,
@@ -547,7 +557,7 @@ class BiomarkersRepo:
         return [
             {
                 "session_number": row["session_number"],
-                "data": _plain(_load_json("biomarkers", "data", row["data"])),
+                "biomarkers": _plain(_load_json("biomarkers", "data", row["data"])),
             }
             for row in rows
         ]

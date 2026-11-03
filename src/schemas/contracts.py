@@ -20,7 +20,7 @@ class Lenient(BaseModel):
 
 
 Speaker = Literal["DOCTOR", "PATIENT"]
-Language = Literal["uk", "en"]
+Language = str
 Sec = Annotated[float, Field(ge=0)]
 
 
@@ -73,7 +73,7 @@ NerMap = dict[str, NerEntry]  # sessions.ner_map: {"[NAME_1]": {"type": "PERSON"
 
 
 class NerItem(Strict):
-    key: str
+    key: str = Field(min_length=1)
     text: str
 
 
@@ -107,7 +107,7 @@ class S6RestoreOut(Strict):
 # ───────────── S2 · Biomarkers (stored entirely in biomarkers.data) ─────────────
 class RawDspFeatures(Strict):
     f0_variability_sd: Annotated[float, Field(ge=0)]
-    f0_mean_hz: Annotated[float, Field(gt=0)]
+    f0_mean_hz: Annotated[float, Field(ge=0)]
     jitter_percent: Annotated[float, Field(ge=0)]
     shimmer_percent: Annotated[float, Field(ge=0)]
     hnr_db: float
