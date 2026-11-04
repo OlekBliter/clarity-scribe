@@ -68,9 +68,17 @@ class AcousticBiomarkerService:
         Returns:
             Standard Python dictionary adhering to approved output schema.
         """
-        audio_path = input_data.get("audio_path")
-        channel_map = input_data.get("channel_map", {})
-        segments_data = input_data.get("segments", [])
+        if not isinstance(input_data, dict):
+            raise InvalidSegmentError("S2 input must be a dictionary.")
+        missing_keys = {"audio_path", "channel_map", "segments"} - input_data.keys()
+        if missing_keys:
+            raise InvalidSegmentError(
+                f"S2 input is missing required keys: {sorted(missing_keys)}."
+            )
+
+        audio_path = input_data["audio_path"]
+        channel_map = input_data["channel_map"]
+        segments_data = input_data["segments"]
 
         if not audio_path or not os.path.exists(audio_path):
             raise AudioFileNotFoundError(f"Audio file at path '{audio_path}' was not found.")
@@ -104,9 +112,7 @@ class AcousticBiomarkerService:
                 else sound_raw
             )
             total_duration = sound_patient.duration
-        except Exception as e:
-            if isinstance(e, InvalidSegmentError):
-                raise
+        except (parselmouth.PraatError, RuntimeError, ValueError) as e:
             raise AudioProcessingError(f"Failed to load or process audio file '{audio_path}': {e}") from e
 
         sound_segments = []
@@ -159,7 +165,7 @@ class AcousticBiomarkerService:
                 patient_segments.append(patient_segment)
                 sound_segments.append(part)
                 segment_dsp_results.append(analyze_segment_pitch_and_quality(part))
-            except Exception as e:
+            except (parselmouth.PraatError, RuntimeError, ValueError) as e:
                 raise AudioProcessingError(f"Error extracting segment ({start_t}-{end_t}): {e}") from e
 
         aggregated_dsp = aggregate_segment_dsp(segment_dsp_results)

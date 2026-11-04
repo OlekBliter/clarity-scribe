@@ -3,11 +3,8 @@ import re
 from typing import Iterator
 
 from .config import NerConfig
-from .models import NerError, Span
-
-
-class ModelError(NerError):
-    """The model could not be loaded or failed during inference."""
+from .exceptions import ModelError
+from .models import Span
 
 
 def resolve_device() -> str:
@@ -28,7 +25,7 @@ def load_model(config: NerConfig):
         from gliner import GLiNER
         model = GLiNER.from_pretrained(config.gliner_model, local_files_only=True)
         return model.to(resolve_device()).eval()
-    except Exception as error:
+    except (OSError, ValueError, RuntimeError) as error:
         raise ModelError("cannot load the GLiNER model") from error
 
 
@@ -51,7 +48,7 @@ class GlinerExtractor:
                 found = self._model.predict_entities(
                     chunk, list(self._labels), threshold=self._threshold, flat_ner=True
                 )
-            except Exception as error:
+            except (OSError, ValueError, RuntimeError) as error:
                 raise ModelError("GLiNER inference failed") from error
             spans += [
                 Span(offset + e["start"], offset + e["end"], self._labels[e["label"]], self.priority)

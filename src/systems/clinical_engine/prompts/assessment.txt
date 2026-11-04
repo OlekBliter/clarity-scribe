@@ -22,6 +22,7 @@ RULES
    "signs of...", "symptoms consistent with...", or "clinical picture shows...".
 3. If you formulate the synthesis yourself, set the 'basis' to "model_synthesis".
 4. Write in Ukrainian, in a formal clinical style, 2-4 sentences.
+5. Keep tags in the format [XXX_n] unchanged.
 
 OUTPUT FORMAT
 Return valid JSON only, with exactly these keys:
