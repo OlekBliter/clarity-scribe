@@ -5,10 +5,12 @@ from typing import Any, Optional
 
 from google.genai.errors import ServerError, APIError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from .exceptions import ConfigurationError, LLMRequestError
 
 from src.schemas import contracts
 
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -21,7 +23,18 @@ class Gemini(LLM):
     ):
         self.model_name = model_name
         self.response_schema = response_schema
-        self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        self.api_key = api_key
+        self.client = None
+
+    def _get_client(self) -> genai.Client:
+        if self.client is None:
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise ConfigurationError(
+                    "GEMINI_API_KEY is not configured. Set it before making an LLM request."
+                )
+            self.client = genai.Client(api_key=api_key)
+        return self.client
 
     @retry(
         retry=retry_if_exception_type((ServerError, APIError)),
@@ -29,6 +42,17 @@ class Gemini(LLM):
         stop=stop_after_attempt(4),
         reraise=True,
     )
+    def _generate_content(
+        self,
+        prompt: str,
+        config: dict[str, Any],
+    ) -> Any:
+        return self._get_client().models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=config,
+        )
+
     def query(
             self,
             prompt: str,
@@ -39,9 +63,10 @@ class Gemini(LLM):
         if target_schema:
             config["response_schema"] = target_schema
 
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=config,
-        )
-        return response.text
+        try:
+            response = self._generate_content(prompt, config)
+            return response.text
+        except APIError as error:
+            raise LLMRequestError(
+                "Gemini request failed after the configured retries."
+            ) from error

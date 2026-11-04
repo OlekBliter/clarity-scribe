@@ -54,7 +54,8 @@ FORMAT RULES
     per item, up to 20 words. Start recommended items with a suggestion verb
     such as "Розглянути...".
 12. Order: all doctor_stated items first, then all recommended items.
-13. Keep placeholders such as [ПІБ_1] unchanged.
+13. Keep placeholders such as [PER_1] or [LOC_1] unchanged.
+    Keep tags in the format [XXX_n] unchanged.
 14. Output only the fields shown below. Do not add "confirmed", the topic, or
     any other field: only the doctor sets "confirmed" later.
 

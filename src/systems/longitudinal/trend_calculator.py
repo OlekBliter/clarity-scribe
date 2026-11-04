@@ -59,7 +59,7 @@ class TrendCalculator:
             slope, intercept = np.polyfit(x, y, 1)
             y_pred = slope * x + intercept
             r_squared = self._calculate_r_squared(y, y_pred)
-        except Exception as exc:
+        except (np.linalg.LinAlgError, ValueError, FloatingPointError) as exc:
             raise TrendCalculationError(
                 f"Linear regression failed for metric '{metric}': {exc}"
             ) from exc

@@ -217,9 +217,18 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-#models
-models/vosk-model-small-uk-v3-small
-models/gliner_multi-v2.1/
+# Local application data and databases
+*.db
+*.db-wal
+*.db-shm
+clarityscribe.db
+audio/
+
+# Downloaded model weights and local model directories
+models/*
+!models/README.md
+!models/THIRDPARTY_LICENSES.txt
+!models/
 
 # Operating System files
 .DS_Store

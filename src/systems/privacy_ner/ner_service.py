@@ -1,7 +1,8 @@
 from .config import NerConfig
+from .exceptions import InvalidRequestError
 from .gliner_extractor import GlinerExtractor
 from .map_manager import NerMapManager, entities_from_dict
-from .models import EntityType, InvalidRequestError
+from .models import EntityType
 from .morphology import UkrainianMorphology
 from .regex_extractor import RegexExtractor
 from .restorer import Restorer

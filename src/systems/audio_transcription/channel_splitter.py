@@ -1,5 +1,7 @@
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 from pathlib import Path
+from .exceptions import InvalidAudioError
 
 def split(path: str, channel_map: dict[str, int]) -> dict:
     """
@@ -17,25 +19,37 @@ def split(path: str, channel_map: dict[str, int]) -> dict:
         16 kHz, 16-bit (the format Vosk and most ASR models require).
     """
 
+    if not isinstance(path, (str, Path)) or not str(path).strip():
+        raise InvalidAudioError("audio_path must be a non-empty path.")
+    if not isinstance(channel_map, dict) or not channel_map:
+        raise InvalidAudioError("channel_map must be a non-empty dictionary.")
+
     audio_path = Path(path)
     if not audio_path.is_file():
-        raise FileNotFoundError(f"Audio file not found: '{path}'")
-
-    if not channel_map:
-        raise ValueError("channel_map cannot be empty.")
+        raise InvalidAudioError(f"Audio file not found: '{path}'")
         
     try:
         full_audio = AudioSegment.from_file(path)
-    except Exception as e:
-        raise ValueError(f"Failed to load or decode audio file '{path}': {e}") from e
+    except (CouldntDecodeError, OSError, FileNotFoundError) as error:
+        raise InvalidAudioError(
+            f"Failed to load or decode audio file '{path}': {error}"
+        ) from error
    
     channels = full_audio.split_to_mono()
     num_channels = len(channels)
 
     for role, idx in channel_map.items():
-        if idx < 0:
-            raise ValueError(f"Channel index for role '{role}' cannot be negative: {idx}")
+        if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+            raise InvalidAudioError(
+                f"Channel index for role '{role}' must be a non-negative integer: {idx}"
+            )
         if idx >= num_channels:
-            raise ValueError(f"Role '{role}' requires channel index {idx}, but the audio file only has {num_channels} channel(s).")
+            raise InvalidAudioError(
+                f"Role '{role}' requires channel index {idx}, but the audio file "
+                f"only has {num_channels} channel(s)."
+            )
 
-    return {role: channels[idx].set_frame_rate(16000).set_sample_width(2) for role, idx in channel_map.items()}
+    return {
+        role: channels[idx].set_frame_rate(16000).set_sample_width(2)
+        for role, idx in channel_map.items()
+    }

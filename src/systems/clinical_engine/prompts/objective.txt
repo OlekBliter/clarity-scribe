@@ -50,7 +50,8 @@ HOW TO INTERPRET
    start and the end of this recording.
 7. Do not retell the patient's complaints: that belongs to the Subjective
    section.
-8. Keep placeholders such as [ПІБ_1] unchanged.
+8. Keep placeholders such as [PER_1] or [LOC_1] unchanged.
+   Keep tags in the format [XXX_n] unchanged.
 9. Write in Ukrainian, in a formal clinical style, 8–12 sentences (up to ~250
    words), as one continuous paragraph or two short paragraphs.
 

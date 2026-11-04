@@ -2,18 +2,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 
-class NerError(Exception):
-    """Base class of every error raised by the NER system."""
-
-
-class ConfigurationError(NerError):
-    """Missing or invalid configuration (for example, no model path)."""
-
-
-class InvalidRequestError(NerError):
-    """The request does not follow the agreed contract."""
-
-
 class EntityType(str, Enum):
     PERSON = "PERSON"
     ADDRESS = "ADDRESS"
