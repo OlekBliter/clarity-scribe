@@ -35,7 +35,8 @@ RULES
 4. Do not invent, assume, or hallucinate any details.
 5. Do not include objective observations (e.g., speech rate, tone, pauses) — that
    belongs to the Objective section.
-6. Keep placeholders such as [ПІБ_1] or [АДРЕСА_1] unchanged.
+6. Keep placeholders such as [PER_1] or [LOC_1] unchanged.
+   Keep tags in the format [XXX_n] unchanged.
 7. Write in Ukrainian, in a formal clinical style, 4–8 sentences (up to ~200 words).
 
 source_segments — an array of exact 'segment_id' integers from the <transcript>

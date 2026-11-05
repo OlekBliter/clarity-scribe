@@ -6,12 +6,7 @@ from vosk import Model, KaldiRecognizer
 import json
 from dotenv import load_dotenv
 import os
-
-#Load vosk model
-load_dotenv()
-model_dir = os.getenv("VOSK_MODEL_DIR")
-if not model_dir:
-    raise ValueError("VOSK_MODEL_DIR is not set; define it in .env")
+from .exceptions import ModelNotFoundError
 
 # Maximum pause (in seconds) between two neighbouring words that still keeps
 # them in the same segment. A longer pause starts a new segment.
@@ -28,7 +23,7 @@ class Segment:
         self.confidence = confidence
 
 @lru_cache(maxsize=1)
-def load_model(model_path = model_dir) -> Model:
+def load_model(model_path: str | None = None) -> Model:
     """
     Load the Vosk model from disk and cache it.
 
@@ -37,20 +32,32 @@ def load_model(model_path = model_dir) -> Model:
     return the same Model object instantly.
 
     Raises:
-        FileNotFoundError: If the folder does not exist or is incomplete.
+        ModelNotFoundError: If the model path is not configured, does not
+            exist, or cannot be loaded.
     """
+    if model_path is None:
+        load_dotenv()
+        model_path = os.getenv("VOSK_MODEL_DIR")
+    if not model_path:
+        raise ModelNotFoundError(
+            "VOSK_MODEL_DIR is not set; define it in .env or the environment."
+        )
+
     path = Path(model_path)
 
     if not path.is_dir():
-        raise FileNotFoundError(f"Папку моделі не знайдено")
+        raise ModelNotFoundError(f"Vosk model directory not found: '{path}'.")
     missing = [d for d in ("am", "conf", "graph") if not (path / d).exists()]
     if missing:
-        raise FileNotFoundError(
+        raise ModelNotFoundError(
             f"{path} is missing {', '.join(missing)}: the model was not fully "
             f"extracted or the wrong folder was specified."
         )
 
-    return Model(str(path))
+    try:
+        return Model(str(path))
+    except (OSError, RuntimeError) as error:
+        raise ModelNotFoundError(f"Failed to load Vosk model from '{path}'.") from error
 
 def recognize_words(audio: AudioSegment, model: Model, speaker: str, punctuate: bool = False) -> list[dict]:
     """

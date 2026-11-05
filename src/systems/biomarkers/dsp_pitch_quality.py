@@ -61,7 +61,7 @@ def analyze_segment_pitch_and_quality(sound_segment: parselmouth.Sound) -> Dict[
             "shimmer": shimmer_val,
             "hnr": hnr_val
         }
-    except Exception as e:
+    except (parselmouth.PraatError, RuntimeError, ValueError) as e:
         raise AudioProcessingError(f"Failed to extract pitch and voice quality: {e}") from e
 
 

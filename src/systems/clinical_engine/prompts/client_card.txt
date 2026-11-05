@@ -27,6 +27,7 @@ FIELD RULES
 8. For any safety field, set attention=true when the transcript contains any hint of
    risk, self-harm, suicidal ideation, or a safety concern. Otherwise use false.
 9. Do not invent, infer, diagnose, or assume information. Preserve placeholders exactly.
+   Keep tags in the format [XXX_n] unchanged.
 10. Use the patient's statements as evidence. A doctor's question alone is not evidence
     of the patient's answer.
 

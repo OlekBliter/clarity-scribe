@@ -4,8 +4,9 @@ from typing import Any
 
 from .LLM import LLM
 from .Gemini import Gemini
+from .exceptions import ClinicalEngineError, LLMResponseError
 from .prompt_manager import PromptManager
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from src.schemas import contracts
 
 class ClinicalService:
@@ -27,7 +28,11 @@ class ClinicalService:
 
         Input:
             {
-                "transcription": ...,
+                "transcription": {
+                    "segments": [
+                        {"segment_id": int, "speaker": str, "text": str}
+                    ]
+                }
             }
 
         Output:
@@ -35,15 +40,17 @@ class ClinicalService:
                 "fields": ...,
             }
         """
-        transcription = input_data["transcription"]
+        transcription = self._get_required(input_data, "transcription")
         prompt = self.prompt_manager.get_prompt(
             prompt_name="client_card",
             transcription=self._prompt_value(transcription))
-        response = self.llm.query(
-            prompt=prompt,
-            schema=contracts.S3Out
-        )
-        return contracts.S3Out.model_validate_json(response).model_dump()
+        try:
+            response = self.llm.query(prompt=prompt, schema=contracts.S3Out)
+            return contracts.S3Out.model_validate_json(response).model_dump()
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise LLMResponseError(
+                "Gemini returned an invalid medical card response."
+            ) from error
 
     def generate_soap_note(self, input_data: dict) -> dict:
         """
@@ -51,7 +58,11 @@ class ClinicalService:
 
         Input:
             {
-                "transcription": ...,
+                "transcription": {
+                    "segments": [
+                        {"segment_id": int, "speaker": str, "text": str}
+                    ]
+                },
                 "biomarkers": ...,
             }
 
@@ -63,29 +74,42 @@ class ClinicalService:
                 "plan": ...,
             }
         """
-        transcription = input_data["transcription"]
-        biomarkers = input_data["biomarkers"]
+        transcription = self._get_required(input_data, "transcription")
+        biomarkers = self._get_required(input_data, "biomarkers")
         subjective = self.__fetch_subjective(transcription)
         objective = self.__fetch_objective(transcription, biomarkers)
         assessment = self.__fetch_assessment(transcription, subjective, objective)
         plan = self.__fetch_plan(transcription, biomarkers, assessment)
 
-        return contracts.S4Out(
-            subjective=subjective,
-            objective=objective,
-            assessment=assessment,
-            plan=plan,
-        ).model_dump()
+        try:
+            return contracts.S4Out(
+                subjective=subjective,
+                objective=objective,
+                assessment=assessment,
+                plan=plan,
+            ).model_dump()
+        except ValidationError as error:
+            raise LLMResponseError("Clinical engine output failed S4 validation.") from error
+
+    @staticmethod
+    def _get_required(input_data: dict, key: str) -> Any:
+        if not isinstance(input_data, dict):
+            raise ClinicalEngineError("Clinical engine input must be a dictionary.")
+        if key not in input_data:
+            raise ClinicalEngineError(
+                f"Clinical engine input is missing required key: '{key}'."
+            )
+        return input_data[key]
 
     def __fetch_subjective(self, transcription: Any) -> contracts.Subjective:
         prompt = self.prompt_manager.get_prompt(
             "subjective", transcription=self._prompt_value(transcription)
         )
-        response = self.llm.query(
-            prompt=prompt,
-            schema=contracts.Subjective
-        )
-        return contracts.Subjective.model_validate_json(response)
+        try:
+            response = self.llm.query(prompt=prompt, schema=contracts.Subjective)
+            return contracts.Subjective.model_validate_json(response)
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise LLMResponseError("Gemini returned an invalid subjective response.") from error
 
     def __fetch_objective(self, transcription: Any, biomarkers: Any) -> contracts.Objective:
         prompt = self.prompt_manager.get_prompt(
@@ -93,11 +117,11 @@ class ClinicalService:
             transcription=self._prompt_value(transcription),
             biomarkers=self._prompt_value(biomarkers),
         )
-        response = self.llm.query(
-            prompt=prompt,
-            schema=contracts.Objective
-        )
-        return contracts.Objective.model_validate_json(response)
+        try:
+            response = self.llm.query(prompt=prompt, schema=contracts.Objective)
+            return contracts.Objective.model_validate_json(response)
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise LLMResponseError("Gemini returned an invalid objective response.") from error
 
     def __fetch_assessment(
         self,
@@ -111,11 +135,11 @@ class ClinicalService:
             objective=objective.model_dump_json(),
             transcription=self._prompt_value(transcription),
         )
-        response = self.llm.query(
-            prompt=prompt,
-            schema=contracts.Assessment
-        )
-        return contracts.Assessment.model_validate_json(response)
+        try:
+            response = self.llm.query(prompt=prompt, schema=contracts.Assessment)
+            return contracts.Assessment.model_validate_json(response)
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise LLMResponseError("Gemini returned an invalid assessment response.") from error
 
     def __fetch_plan(
         self,
@@ -129,8 +153,8 @@ class ClinicalService:
             transcription=self._prompt_value(transcription),
             biomarkers=self._prompt_value(biomarkers),
         )
-        response = self.llm.query(
-            prompt=prompt,
-            schema=list[contracts.PlanItem]
-        )
-        return TypeAdapter(list[contracts.PlanItem]).validate_json(response)
+        try:
+            response = self.llm.query(prompt=prompt, schema=list[contracts.PlanItem])
+            return TypeAdapter(list[contracts.PlanItem]).validate_json(response)
+        except (ValidationError, json.JSONDecodeError) as error:
+            raise LLMResponseError("Gemini returned an invalid plan response.") from error
