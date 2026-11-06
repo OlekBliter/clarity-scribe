@@ -12,7 +12,7 @@ class Step(str, Enum):
     S4_RESTORE = "S4_RESTORE"
     MARK_DRAFTED = "MARK_DRAFTED"
 
-def step(session: dict, card, note) -> Step | None:
+def next_step(session: dict, card, note) -> Step | None:
     session_status_transitions = {
         'drafted': None,
         'approved': None,

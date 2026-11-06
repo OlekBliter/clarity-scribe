@@ -9,13 +9,14 @@ import wave
 from array import array
 from pathlib import Path
 
-from database.exceptions import UserInputError
+from src.database.exceptions import UserInputError
 
 
 logger = logging.getLogger(__name__)
 
 
 def _session_dir(data_dir: Path | str, patient_id: str, session_id: str) -> Path:
+    """Build an audio directory without allowing identifiers to escape it."""
     for identifier in (patient_id, session_id):
         if (
             not isinstance(identifier, str)
@@ -35,6 +36,11 @@ def import_wav(
     patient_id: str,
     session_id: str,
 ) -> Path:
+    """Validate and atomically install a stereo WAV as session audio.wav.
+
+    On failure, any existing audio.wav is retained. A temporary copy is
+    removed, and a newly created empty session directory is cleaned up.
+    """
     source_path = Path(source)
     if source_path.suffix.lower() != ".wav":
         raise UserInputError("Потрібен файл формату .wav")
@@ -87,6 +93,7 @@ def import_wav(
 
 
 def duration_seconds(path: Path | str) -> float:
+    """Return WAV duration in seconds or raise UserInputError."""
     try:
         with wave.open(str(path), "rb") as wav_in:
             rate = wav_in.getframerate()
@@ -98,6 +105,11 @@ def duration_seconds(path: Path | str) -> float:
 
 
 def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:
+    """Return normalized maximum absolute amplitudes per time bin.
+
+    Read only the frames in the current bin. Unsupported sample widths and
+    unreadable files return an empty list. Empty bins have zero amplitude.
+    """
     if bins <= 0:
         return []
 
@@ -134,6 +146,7 @@ def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:
 
 
 def delete_session_dir(data_dir: Path | str, patient_id: str, session_id: str) -> None:
+    """Remove session audio after database commit; log filesystem failures."""
     session_dir = _session_dir(data_dir, patient_id, session_id)
     try:
         shutil.rmtree(session_dir)
@@ -144,6 +157,7 @@ def delete_session_dir(data_dir: Path | str, patient_id: str, session_id: str) -
 
 
 def delete_patient_dir(data_dir: Path | str, patient_id: str) -> None:
+    """Remove all patient audio after database commit; log failures."""
     # Apply the same identifier validation used by session paths.
     _session_dir(data_dir, patient_id, "validation")
     patient_dir = Path(data_dir) / "audio" / patient_id
