@@ -1,5 +1,5 @@
 from .LLM import LLM
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from google import genai
 from typing import Any, Optional
 
@@ -61,7 +61,11 @@ class Gemini(LLM):
         config: dict[str, Any] = {"response_mime_type": "application/json"}
         target_schema = schema or self.response_schema
         if target_schema:
-            config["response_schema"] = target_schema
+            # Send JSON Schema directly so Gemini receives unions and nullable fields.
+            config["response_json_schema"] = (
+                target_schema if isinstance(target_schema, dict)
+                else TypeAdapter(target_schema).json_schema()
+            )
 
         try:
             response = self._generate_content(prompt, config)
