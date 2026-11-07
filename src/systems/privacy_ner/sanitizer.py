@@ -23,8 +23,16 @@ class Sanitizer:
         self._extractors = extractors
         self._morphology = morphology
         self._min_word_len = config.min_word_len
-        self._keep_keys = frozenset(word.lower() for word in config.keep_words)
-        self._ignore_keys = frozenset(word.lower() for word in config.ignore_words)
+        self._keep_keys = frozenset(
+            key
+            for word in config.keep_words
+            for key in morphology.keys(word)
+        )
+        self._ignore_keys = frozenset(
+            key
+            for word in config.ignore_words
+            for key in morphology.keys(word)
+        )
 
     def sanitize(self, texts: list[str], manager: NerMapManager) -> list[str]:
         detected = [self._detect(text, manager) for text in texts]
