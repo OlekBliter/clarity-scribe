@@ -9,7 +9,7 @@ import wave
 from array import array
 from pathlib import Path
 
-from src.database.exceptions import UserInputError
+from src.services.orchestrator.errors import DoctorInputError, OrchestratorError
 
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,76 @@ def _session_dir(data_dir: Path | str, patient_id: str, session_id: str) -> Path
             or "/" in identifier
             or "\\" in identifier
         ):
-            raise UserInputError("Invalid patient or session identifier")
+            raise OrchestratorError("Invalid patient or session identifier")
     return Path(data_dir) / "audio" / patient_id / session_id
+
+
+def stage_wav(source: Path | str, data_dir: Path | str) -> Path:
+    """Validate a stereo WAV and copy it to a temporary file inside the data dir.
+
+    The slow part of importing a recording. It touches no session directory and
+    needs no database lock. The caller must either pass the returned path to
+    :func:`install_staged` or delete it.
+    """
+    source_path = Path(source)
+    if source_path.suffix.lower() != ".wav":
+        raise DoctorInputError("Потрібен файл формату .wav")
+
+    try:
+        with wave.open(str(source_path), "rb") as wav_in:
+            if wav_in.getnchannels() != 2:
+                raise DoctorInputError("Потрібен двоканальний .wav")
+            if wav_in.getnframes() == 0:
+                raise DoctorInputError("WAV-файл порожній")
+    except (wave.Error, EOFError) as exc:
+        raise DoctorInputError("Некоректний WAV-файл") from exc
+    except OSError as exc:
+        raise DoctorInputError("Не вдалося відкрити WAV-файл") from exc
+
+    staging_dir = Path(data_dir) / "audio"
+    temp_path: Path | None = None
+    try:
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            prefix=".staging-", suffix=".tmp", dir=staging_dir, delete=False
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            with source_path.open("rb") as source_file:
+                shutil.copyfileobj(source_file, temp_file)
+    except OSError as exc:
+        discard_staged(temp_path)
+        raise DoctorInputError("Не вдалося зберегти WAV-файл") from exc
+    return temp_path
+
+
+def discard_staged(staged: Path | None) -> None:
+    """Remove a staged file if it still exists; log filesystem failures."""
+    if staged is None:
+        return
+    try:
+        staged.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Failed to remove temporary WAV %s: %s", staged, exc)
+
+
+def install_staged(
+    staged: Path,
+    data_dir: Path | str,
+    patient_id: str,
+    session_id: str,
+) -> Path:
+    """Atomically move a staged WAV to ``audio/<patient>/<session>/audio.wav``.
+
+    A rename on the same filesystem: fast enough to run inside a transaction.
+    """
+    session_dir = _session_dir(data_dir, patient_id, session_id)
+    dest_file = session_dir / "audio.wav"
+    try:
+        session_dir.mkdir(parents=True, exist_ok=True)
+        os.replace(staged, dest_file)
+    except OSError as exc:
+        raise DoctorInputError("Не вдалося зберегти WAV-файл") from exc
+    return dest_file
 
 
 def import_wav(
@@ -38,70 +106,33 @@ def import_wav(
 ) -> Path:
     """Validate and atomically install a stereo WAV as session audio.wav.
 
-    On failure, any existing audio.wav is retained. A temporary copy is
-    removed, and a newly created empty session directory is cleaned up.
+    On failure, any existing audio.wav is retained and the temporary copy is
+    removed.
     """
-    source_path = Path(source)
-    if source_path.suffix.lower() != ".wav":
-        raise UserInputError("Потрібен файл формату .wav")
-
+    dest_file = _session_dir(data_dir, patient_id, session_id) / "audio.wav"
     try:
-        with wave.open(str(source_path), "rb") as wav_in:
-            if wav_in.getnchannels() != 2:
-                raise UserInputError("Потрібен двоканальний .wav")
-    except (wave.Error, EOFError) as exc:
-        raise UserInputError("Некоректний WAV-файл") from exc
-    except OSError as exc:
-        raise UserInputError("Не вдалося відкрити WAV-файл") from exc
-
-    session_dir = _session_dir(data_dir, patient_id, session_id)
-    dest_file = session_dir / "audio.wav"
-    try:
-        if source_path.resolve() == dest_file.resolve():
+        if Path(source).resolve() == dest_file.resolve():
             return dest_file
     except OSError as exc:
-        raise UserInputError("Не вдалося визначити шлях WAV-файлу") from exc
+        raise DoctorInputError("Не вдалося визначити шлях WAV-файлу") from exc
 
-    existed_before = session_dir.exists()
-    temp_path = None
+    staged = stage_wav(source, data_dir)
     try:
-        session_dir.mkdir(parents=True, exist_ok=True)
-        # Keep the temporary file beside the destination for atomic replace.
-        with tempfile.NamedTemporaryFile(
-            prefix=".audio-", suffix=".tmp", dir=session_dir, delete=False
-        ) as temp_file:
-            temp_path = Path(temp_file.name)
-            with source_path.open("rb") as source_file:
-                shutil.copyfileobj(source_file, temp_file)
-
-        os.replace(temp_path, dest_file)
-    except OSError as exc:
-        raise UserInputError("Не вдалося зберегти WAV-файл") from exc
+        return install_staged(staged, data_dir, patient_id, session_id)
     finally:
-        if temp_path is not None:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning("Failed to remove temporary WAV %s: %s", temp_path, exc)
-        if not existed_before:
-            try:
-                session_dir.rmdir()  # Only removes an empty directory.
-            except OSError:
-                pass  # A successful copy leaves audio.wav in the directory.
-
-    return dest_file
+        discard_staged(staged)
 
 
 def duration_seconds(path: Path | str) -> float:
-    """Return WAV duration in seconds or raise UserInputError."""
+    """Return WAV duration in seconds or raise DoctorInputError."""
     try:
         with wave.open(str(path), "rb") as wav_in:
             rate = wav_in.getframerate()
             if rate <= 0:
-                raise UserInputError("Некоректна частота дискретизації WAV")
+                raise DoctorInputError("Некоректна частота дискретизації WAV")
             return wav_in.getnframes() / rate
     except (wave.Error, EOFError, OSError) as exc:
-        raise UserInputError("Не вдалося визначити тривалість WAV-файлу") from exc
+        raise DoctorInputError("Не вдалося визначити тривалість WAV-файлу") from exc
 
 
 def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:

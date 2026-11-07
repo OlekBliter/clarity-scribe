@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import os
-import shutil
-import tempfile
 import logging
+import os
+import threading
+import uuid
+from contextlib import ExitStack, contextmanager
 
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Iterator
 
 from pydantic import ValidationError
 
 from src.database.connection import Database
-from src.database.exceptions import UserInputError
+from src.database.exceptions import RepositoryError
 from src.database.repos import (
     BiomarkersRepo,
     MedicalCardsRepo,
@@ -23,7 +24,6 @@ from src.database.repos import (
 )
 from src.schemas.contracts import (
     DoctorCommand,
-    MedicalCardData,
     S1Out,
     S2Out,
     S3Out,
@@ -35,9 +35,9 @@ from src.schemas.contracts import (
 from src.services.orchestrator.audio_files import (
     delete_patient_dir,
     delete_session_dir,
-    duration_seconds,
-    import_wav,
-    waveform_peaks,
+    discard_staged,
+    install_staged,
+    stage_wav,
 )
 from src.services.orchestrator.builders import (
     build_s1_in,
@@ -46,7 +46,6 @@ from src.services.orchestrator.builders import (
     build_s4_in,
     build_s5_in,
     build_s6_in,
-    sanitized_segments,
 )
 from src.services.orchestrator.edits import apply_card_edits, apply_soap_edits
 from src.services.orchestrator.restore import (
@@ -55,9 +54,15 @@ from src.services.orchestrator.restore import (
     s3_to_items,
     s4_to_items,
 )
-from src.services.orchestrator.state import Step, next_step
+from src.services.orchestrator.errors import (
+    DoctorInputError,
+    InvalidTransitionError,
+    OrchestratorError,
+    StepFailedError,
+)
+from src.services.orchestrator.state import Step, next_step, stage_states
 
-# System base exceptions (after Stage 0.1 - 0.5)
+# System base exceptions
 from src.systems.audio_transcription.exceptions import AudioTranscriptionError
 from src.systems.biomarkers import AcousticBiomarkerError
 from src.systems.clinical_engine.exceptions import (
@@ -70,24 +75,6 @@ from src.systems.privacy_ner import NerError
 logger = logging.getLogger(__name__)
 
 
-class OrchestratorError(Exception):
-    """Base exception for all orchestrator-level errors."""
-
-
-class InvalidTransitionError(OrchestratorError):
-    """Raised when an operation violates session or document state rules."""
-
-
-class StepFailedError(OrchestratorError):
-    """Raised when a pipeline step fails due to a system or validation error."""
-
-    def __init__(self, step_name: str, message: str, cause: Exception | None = None) -> None:
-        super().__init__(f"Step '{step_name}' failed: {message}")
-        self.step_name = step_name
-        self.error_message = message
-        self.cause = cause
-
-
 SYSTEM_ERRORS: tuple[type[Exception], ...] = (
     AudioTranscriptionError,
     AcousticBiomarkerError,
@@ -97,19 +84,53 @@ SYSTEM_ERRORS: tuple[type[Exception], ...] = (
     ValidationError,
 )
 
+# Errors recorded in sessions.failed_step. Anything else is a bug and propagates.
+STEP_ERRORS: tuple[type[Exception], ...] = SYSTEM_ERRORS + (
+    RepositoryError,
+    OSError,
+    OrchestratorError,
+)
+
 REQUIRED_SYSTEM_KEYS: frozenset[str] = frozenset({"s1", "s2", "s3", "s4", "s5", "s6"})
+
+
+def build_default_systems() -> dict[str, Any]:
+    """Build the real S1-S6 services.
+
+    Imports are local so that importing the orchestrator does not load Vosk,
+    GLiNER, pymorphy3 or the Gemini client. Models and API keys are read lazily
+    by the services themselves (VOSK_MODEL_DIR, GLINER_MODEL_DIR,
+    GEMINI_API_KEY), so a missing value surfaces as a step error, not at start-up.
+    """
+    from src.systems.audio_transcription import AudioTranscriptionService
+    from src.systems.biomarkers import AcousticBiomarkerService
+    from src.systems.clinical_engine import ClinicalService
+    from src.systems.longitudinal import DynamicsService
+    from src.systems.longitudinal.metrics_extractor import MetricsExtractor
+    from src.systems.longitudinal.trend_calculator import TrendCalculator
+    from src.systems.privacy_ner import PrivacyNerService
+
+    clinical = ClinicalService()  # S3 and S4 share one service and one LLM client
+    return {
+        "s1": AudioTranscriptionService(),
+        "s2": AcousticBiomarkerService(),
+        "s3": clinical,
+        "s4": clinical,
+        "s5": DynamicsService(MetricsExtractor(), TrendCalculator()),
+        "s6": PrivacyNerService(),
+    }
 
 
 class Orchestrator:
     """Coordinates session processing steps, database transactions, and edits."""
 
-    def __init__(self, db: Database, data_dir: Path, systems: dict[str, Any]) -> None:
+    def __init__(self, db: Database, systems: dict[str, Any], data_dir: Path) -> None:
         """Initialize the orchestrator with database, storage directory, and systems.
 
         Args:
             db: Database instance managing SQLite connections and transactions.
-            data_dir: Base directory path for local application data and audio files.
             systems: Dictionary mapping keys 's1'..'s6' to system service instances.
+            data_dir: Base directory path for local application data and audio files.
         """
         missing = REQUIRED_SYSTEM_KEYS - set(systems.keys())
         if missing:
@@ -121,12 +142,43 @@ class Orchestrator:
         self.data_dir = Path(data_dir)
         self.systems = systems
 
+        # Sessions currently being processed, restarted or deleted by this process.
+        self._busy_sessions: set[str] = set()
+        self._busy_lock = threading.Lock()
+
         self.patients_repo = PatientsRepo()
         self.sessions_repo = SessionsRepo()
         self.transcript_repo = TranscriptRepo()
         self.biomarkers_repo = BiomarkersRepo()
         self.cards_repo = MedicalCardsRepo()
         self.soap_repo = SoapNotesRepo()
+
+    @contextmanager
+    def _claim_sessions(self, session_ids: Iterable[str]) -> Iterator[None]:
+        """Exclusive access to sessions for processing, restart or deletion.
+
+        All-or-nothing: if any of the sessions is already claimed, none is taken
+        and DoctorInputError is raised. Prevents a long system call from
+        finishing after a session was reset or deleted, which would store
+        results for different audio. Protects threads of one process only,
+        which is enough for a desktop application.
+        """
+        ids = set(session_ids)
+        with self._busy_lock:
+            if ids & self._busy_sessions:
+                raise DoctorInputError(
+                    "Цей запис зараз обробляється. Дочекайтесь завершення."
+                )
+            self._busy_sessions |= ids
+        try:
+            yield
+        finally:
+            with self._busy_lock:
+                self._busy_sessions -= ids
+
+    def _claim_session(self, session_id: str):
+        """Exclusive access to a single session (see :meth:`_claim_sessions`)."""
+        return self._claim_sessions([session_id])
 
     @staticmethod
     def _audio_relative_path(patient_id: str, session_id: str) -> str:
@@ -138,28 +190,18 @@ class Orchestrator:
         return self.data_dir / self._audio_relative_path(patient_id, session_id)
 
     @staticmethod
-    def _backup_audio(path: Path) -> Path | None:
-        """Back up an existing WAV before a session is restarted."""
+    def _move_aside(path: Path) -> Path | None:
+        """Rename an existing WAV to a hidden backup name (instant, no copy)."""
         if not path.exists():
             return None
         if not path.is_file():
-            raise UserInputError("Session audio path is not a file")
-
-        backup: Path | None = None
+            raise OrchestratorError("Session audio path is not a file")
+        backup = path.with_name(f".backup-{uuid.uuid4().hex}.wav")
         try:
-            with tempfile.NamedTemporaryFile(
-                prefix=".backup-", suffix=".wav", dir=path.parent, delete=False,
-            ) as tmp:
-                backup = Path(tmp.name)
-            shutil.copy2(path, backup)
-            return backup
+            os.replace(path, backup)
         except OSError as exc:
-            if backup is not None:
-                try:
-                    backup.unlink(missing_ok=True)
-                except OSError as cleanup_error:
-                    logger.warning("Cannot remove backup %s: %s", backup, cleanup_error)
-            raise UserInputError("Не вдалося створити резервну копію аудіо") from exc
+            raise DoctorInputError("Не вдалося створити резервну копію аудіо") from exc
+        return backup
 
     @staticmethod
     def _remove_backup(backup: Path | None) -> None:
@@ -171,6 +213,14 @@ class Orchestrator:
         except OSError as exc:
             logger.warning("Failed to remove backup %s: %s", backup, exc)
 
+    @staticmethod
+    def _error_text(exc: Exception) -> str:
+        """Error text stored in the database; never includes pydantic input values."""
+        if isinstance(exc, ValidationError):
+            locations = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
+            return f"ValidationError: {exc.error_count()} error(s) in {locations}"
+        return f"{type(exc).__name__}: {exc}"
+
     def _run_step(
         self,
         session_id: str,
@@ -179,14 +229,14 @@ class Orchestrator:
     ) -> None:
         """Execute a single pipeline step adhering to the golden transaction rules.
 
-        If work_fn raises any exception from SYSTEM_ERRORS, the session status remains
+        If work_fn raises any exception from STEP_ERRORS, the session status remains
         unchanged, failed_step and error are recorded in a separate transaction,
-        and StepFailedError is raised.
+        and StepFailedError is raised. Other exceptions are bugs and propagate.
         """
         try:
             work_fn()
-        except SYSTEM_ERRORS as exc:
-            error_text = str(exc)
+        except STEP_ERRORS as exc:
+            error_text = self._error_text(exc)
             logger.error(
                 "Pipeline step '%s' failed for session '%s': %s",
                 step_name,
@@ -202,7 +252,6 @@ class Orchestrator:
                 message=error_text,
                 cause=exc,
             ) from exc
-
 
     def _step_s1(self, session_id: str) -> None:
         """Transcribe session audio and atomically save transcript and status."""
@@ -349,7 +398,7 @@ class Orchestrator:
                         return
                 segments = self.transcript_repo.get_segments(conn, session_id)
 
-            # Sanitize once; never send raw text to S3.
+            # Only sanitized text goes to S3; build_s3_in refuses raw segments.
             request = build_s3_in(segments)
             known_ids = {segment["segment_id"] for segment in segments}
             output = self._generate_clinical_with_retry(
@@ -485,6 +534,15 @@ class Orchestrator:
             return latest["session_number"]
         return latest["session_number"] + 1
 
+    def create_patient(self, contacts: dict[str, Any]) -> str:
+        """Create a patient. All fields are optional; blank strings become None."""
+        cleaned = {
+            key: (value.strip() or None) if isinstance(value, str) else value
+            for key, value in contacts.items()
+        }
+        with self.db.transaction() as conn:
+            return self.patients_repo.create(conn, cleaned)
+
     def register_session(
         self,
         patient_id: str,
@@ -494,26 +552,31 @@ class Orchestrator:
     ) -> str:
         """Create a new session or restart the latest unfinished session.
 
-        Database changes are committed before any backup is discarded. If the
-        transaction fails, the previous WAV is restored (on restart), or a new
-        session's audio directory is removed (on creation).
+        The slow WAV copy happens before the transaction, so the write lock is
+        held only for renames and short SQL. If the transaction fails, the
+        previous WAV is restored (on restart) or the new audio directory is
+        removed (on creation). On restart the date and language are replaced
+        with the newly entered values.
         """
         if language_hint != "uk":
-            raise UserInputError("Unsupported language: only 'uk' is available")
-        if not isinstance(session_date, str):
-            raise UserInputError("Session date must use YYYY-MM-DD format")
+            raise DoctorInputError("Підтримується лише українська мова.")
         try:
-            if date.fromisoformat(session_date).isoformat() != session_date:
-                raise ValueError("noncanonical date")
-        except ValueError as exc:
-            raise UserInputError("Session date must use YYYY-MM-DD format") from exc
+            valid_date = isinstance(session_date, str) and (
+                date.fromisoformat(session_date).isoformat() == session_date
+            )
+        except ValueError:
+            valid_date = False
+        if not valid_date:
+            raise DoctorInputError("Дата сесії має бути у форматі РРРР-ММ-ДД.")
 
+        staged = stage_wav(source_wav, self.data_dir)
         session_id: str | None = None
         retry_path: Path | None = None
         backup_path: Path | None = None
         is_new = False
-        audio_installed = False
+        installed = False
         committed = False
+        claims = ExitStack()  # holds the session claim until cleanup is finished
 
         try:
             # BEGIN IMMEDIATE serializes creation of session numbers for a patient.
@@ -527,11 +590,14 @@ class Orchestrator:
 
                 if unfinished:
                     session_id = latest["session_id"]
+                    # Refuses a restart while the session is being processed.
+                    claims.enter_context(self._claim_session(session_id))
                     retry_path = self._audio_path(patient_id, session_id)
-                    backup_path = self._backup_audio(retry_path)
-                    import_wav(source_wav, self.data_dir, patient_id, session_id)
-                    audio_installed = True
+                    backup_path = self._move_aside(retry_path)
+                    install_staged(staged, self.data_dir, patient_id, session_id)
+                    installed = True
                     self.sessions_repo.update_language(conn, session_id, language_hint)
+                    self.sessions_repo.update_date(conn, session_id, session_date)
                     self.sessions_repo.reset_pipeline(conn, session_id)
                 else:
                     number = self.sessions_repo.max_number(conn, patient_id)
@@ -546,36 +612,36 @@ class Orchestrator:
                         language_hint,
                     )
                     is_new = True
-                    import_wav(source_wav, self.data_dir, patient_id, session_id)
-                    audio_installed = True
+                    install_staged(staged, self.data_dir, patient_id, session_id)
+                    installed = True
                     self.sessions_repo.update_audio_path(
                         conn,
                         session_id,
                         self._audio_relative_path(patient_id, session_id),
                     )
             committed = True
-            if session_id is None:
-                raise OrchestratorError("Session registration returned no identifier")
             return session_id
         finally:
             # This runs *after* the database context manager, including commit.
+            discard_staged(staged)
             if not committed and session_id is not None:
                 if is_new:
                     delete_session_dir(self.data_dir, patient_id, session_id)
-                elif audio_installed and retry_path is not None:
-                    if backup_path is not None:
-                        try:
-                            os.replace(backup_path, retry_path)
-                        except OSError as exc:
-                            logger.error(
-                                "Failed to restore session audio %s from %s: %s",
-                                retry_path, backup_path, exc,
-                            )
-                            # Preserve the backup for manual recovery.
-                            backup_path = None
-                    else:
-                        delete_session_dir(self.data_dir, patient_id, session_id)
+                elif backup_path is not None and retry_path is not None:
+                    try:
+                        os.replace(backup_path, retry_path)
+                        backup_path = None
+                    except OSError as exc:
+                        logger.error(
+                            "Failed to restore session audio %s from %s: %s",
+                            retry_path, backup_path, exc,
+                        )
+                        backup_path = None  # keep the backup for manual recovery
+                elif installed:
+                    # There was no previous audio; drop the one just installed.
+                    delete_session_dir(self.data_dir, patient_id, session_id)
             self._remove_backup(backup_path)
+            claims.close()
 
     def _get_next_step(self, session_id: str) -> Step | None:
         """Return the next executable step, refusing implicit failed-step retries."""
@@ -605,10 +671,11 @@ class Orchestrator:
 
     def run_next(self, session_id: str) -> Step | None:
         """Execute a single pending pipeline step, if one exists."""
-        current_step = self._get_next_step(session_id)
-        if current_step is not None:
-            self._execute_step(session_id, current_step)
-        return current_step
+        with self._claim_session(session_id):
+            current_step = self._get_next_step(session_id)
+            if current_step is not None:
+                self._execute_step(session_id, current_step)
+            return current_step
 
     def run_until_blocked(
         self,
@@ -616,18 +683,49 @@ class Orchestrator:
         on_progress: Callable[[Step, str], None] | None = None,
     ) -> None:
         """Execute all pending steps, reporting 'running' and 'done' events."""
-        for _ in range(len(Step)):
-            current_step = self._get_next_step(session_id)
-            if current_step is None:
-                return
-            if on_progress is not None:
-                on_progress(current_step, "running")
-            self._execute_step(session_id, current_step)
-            if on_progress is not None:
-                on_progress(current_step, "done")
+        with self._claim_session(session_id):
+            for _ in range(len(Step) + 1):  # one spare iteration for the final None check
+                current_step = self._get_next_step(session_id)
+                if current_step is None:
+                    return
+                if on_progress is not None:
+                    on_progress(current_step, "running")
+                self._execute_step(session_id, current_step)
+                if on_progress is not None:
+                    on_progress(current_step, "done")
 
-        if self._get_next_step(session_id) is not None:
-            raise OrchestratorError("Pipeline exceeded the maximum number of steps")
+            if self._get_next_step(session_id) is not None:
+                raise OrchestratorError("Pipeline exceeded the maximum number of steps")
+
+    @staticmethod
+    def _require_editable(document: dict[str, Any]) -> None:
+        """Only documents in 'draft' may be edited or approved."""
+        if document["status"] == "approved":
+            raise InvalidTransitionError("Підтверджені дані змінювати не можна.")
+        if document["status"] != "draft":
+            raise InvalidTransitionError("Документ ще не готовий до перегляду.")
+
+    def get_processing_state(self, session_id: str) -> dict[str, Any]:
+        """Neutral processing state for the facade: stages, error flag, finished."""
+        with self.db.read() as conn:
+            session = self.sessions_repo.get(conn, session_id)
+            card = None
+            if session["session_number"] == 1:
+                card = self.cards_repo.find(conn, session["patient_id"])
+            note = self.soap_repo.find(conn, session_id)
+        failed_step = session.get("failed_step")
+        return {
+            "stages": stage_states(
+                session["status"],
+                session["session_number"],
+                failed_step,
+                card["status"] if card else None,
+                note["status"] if note else None,
+            ),
+            "error": session.get("error") if failed_step else None,
+            "failed_step": failed_step,
+            "finished": session["status"] in ("drafted", "approved"),
+        }
 
     def apply_doctor_command(self, command: DoctorCommand) -> None:
         """Save doctor edits or approve a SOAP note or medical card atomically."""
@@ -635,10 +733,10 @@ class Orchestrator:
             if command.target == "soap":
                 session = self.sessions_repo.get(conn, command.id)
                 document = self.soap_repo.get(conn, command.id)
-                if document["status"] != "draft":
-                    raise InvalidTransitionError(
-                        "Підтверджені дані змінювати не можна"
-                    )
+                self._require_editable(document)
+                self.soap_repo.set_review_started(
+                    conn, command.id, command.review_started_at.isoformat()
+                )
 
                 if command.edits:
                     result = apply_soap_edits(document["final"], command.edits)
@@ -649,20 +747,17 @@ class Orchestrator:
                 if command.action == "approve":
                     if session["status"] != "drafted":
                         raise InvalidTransitionError(
-                            "Сесія ще не готова до підтвердження"
+                            "Сесія ще не готова до підтвердження."
                         )
-                    self.soap_repo.set_review_started(
-                        conn, command.id, command.review_started_at.isoformat()
-                    )
                     self.soap_repo.approve(conn, command.id, command.at.isoformat())
                     self._maybe_approve_session(conn, command.id)
 
             elif command.target == "card":
                 document = self.cards_repo.get(conn, command.id)
-                if document["status"] != "draft":
-                    raise InvalidTransitionError(
-                        "Підтверджені дані змінювати не можна"
-                    )
+                self._require_editable(document)
+                self.cards_repo.set_review_started(
+                    conn, command.id, command.review_started_at.isoformat()
+                )
 
                 if command.edits:
                     result = apply_card_edits(document["data"], command.edits)
@@ -675,22 +770,19 @@ class Orchestrator:
                     session = self.sessions_repo.get(conn, session_id)
                     if session["status"] != "drafted":
                         raise InvalidTransitionError(
-                            "Сесія ще не готова до підтвердження"
+                            "Сесія ще не готова до підтвердження."
                         )
-                    self.cards_repo.set_review_started(
-                        conn, command.id, command.review_started_at.isoformat()
-                    )
                     self.cards_repo.approve(conn, command.id, command.at.isoformat())
                     self._maybe_approve_session(conn, session_id)
 
             else:
-                raise UserInputError("Unknown doctor command target")
+                raise OrchestratorError(f"Unknown doctor command target: {command.target!r}")
 
     def _maybe_approve_session(self, conn: Any, session_id: str) -> None:
         """Approve a session once all its required documents are approved."""
         session = self.sessions_repo.get(conn, session_id)
         if session["status"] != "drafted":
-            raise InvalidTransitionError("Сесія ще не готова до підтвердження")
+            raise InvalidTransitionError("Сесія ще не готова до підтвердження.")
 
         note = self.soap_repo.find(conn, session_id)
         if note is None or note["status"] != "approved":
@@ -702,30 +794,46 @@ class Orchestrator:
                 return
             if card["source_session_id"] != session_id:
                 raise InvalidTransitionError(
-                    "Медкартка належить іншій сесії"
+                    "Медкартка належить іншій сесії."
                 )
 
         self.sessions_repo.set_status(conn, session_id, "approved")
 
     def delete_session(self, session_id: str) -> None:
         """Delete a session, then remove its audio after database commit."""
-        with self.db.transaction() as conn:
+        with self._claim_session(session_id), self.db.transaction() as conn:
             session = self.sessions_repo.get(conn, session_id)
             patient_id = session["patient_id"]
             if session["session_number"] == 1:
                 sessions = self.sessions_repo.list_by_patient(conn, patient_id)
                 if len(sessions) > 1:
-                    raise UserInputError(
-                        "Не можна видалити першу сесію, поки існують інші"
+                    raise DoctorInputError(
+                        "Першу сесію не можна видалити, поки є інші."
                     )
             self.sessions_repo.delete(conn, session_id)
 
         delete_session_dir(self.data_dir, patient_id, session_id)
 
     def delete_patient(self, patient_id: str) -> None:
-        """Delete a patient and all records, then remove stored audio."""
-        with self.db.transaction() as conn:
-            self.patients_repo.delete(conn, patient_id)
+        """Delete a patient and all records, then remove stored audio.
+
+        All sessions of the patient are claimed before the transaction starts and
+        stay claimed until after its commit, so a run cannot start on a session
+        that is being deleted. The list is read again inside the write
+        transaction; if it changed in between, nothing is deleted.
+        """
+        with self.db.read() as conn:
+            known = {x["session_id"] for x in self.sessions_repo.list_by_patient(conn, patient_id)}
+
+        with self._claim_sessions(known):
+            with self.db.transaction() as conn:
+                current = {
+                    x["session_id"]
+                    for x in self.sessions_repo.list_by_patient(conn, patient_id)
+                }
+                if current != known:
+                    raise DoctorInputError("Дані пацієнта змінилися. Спробуйте ще раз.")
+                self.patients_repo.delete(conn, patient_id)
 
         delete_patient_dir(self.data_dir, patient_id)
 

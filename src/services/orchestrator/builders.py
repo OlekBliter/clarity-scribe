@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Any
 
+from src.services.orchestrator.errors import OrchestratorError
+
 
 def _audio_path(session: dict[str, Any], data_dir: str | Path) -> str:
     """Resolve the recorded audio path against the application data directory."""
@@ -55,8 +57,6 @@ def sanitized_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in segments:
         sanitized = row.get("text_sanitized")
         if sanitized is None:
-            # Import locally to avoid a circular import during module initialization.
-            from src.services.orchestrator.orchestrator import OrchestratorError
             raise OrchestratorError(
                 f"Segment {row['segment_id']} has not been sanitized"
             )

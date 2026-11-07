@@ -1,155 +1,173 @@
+"""Pure functions describing pipeline state. No database access, no UI text."""
+
+from __future__ import annotations
+
 from enum import Enum
-from unittest import case
+from typing import Any
 
 
 class Step(str, Enum):
-    S1 = "S1"
-    S6_SANITIZE = "S6_SANITIZE"
-    S2 = "S2"
-    S3_GENERATE = "S3_GENERATE"
-    S3_RESTORE = "S3_RESTORE"
-    S4_GENERATE = "S4_GENERATE"
-    S4_RESTORE = "S4_RESTORE"
-    MARK_DRAFTED = "MARK_DRAFTED"
+    """Pipeline steps. Values are what is stored in ``sessions.failed_step``."""
 
-def next_step(session: dict, card, note) -> Step | None:
-    session_status_transitions = {
-        'drafted': None,
-        'approved': None,
-        'transcribed': Step.S6_SANITIZE,
-        'uploaded': Step.S1,
-        'sanitized': Step.S2
-    }
+    S1 = "s1"
+    S6_SANITIZE = "s6_sanitize"
+    S2 = "s2"
+    S3_GENERATE = "s3_generate"
+    S3_RESTORE = "s3_restore"
+    S4_GENERATE = "s4_generate"
+    S4_RESTORE = "s4_restore"
+    MARK_DRAFTED = "mark_drafted"
 
-    if session['status'] in session_status_transitions.keys():
-        return session_status_transitions[session.status]
 
-    is_first_session = (session['session_number'] == 1)
-    if is_first_session and card is None and session['status'] == 'analyzed':
-        return Step.S3_GENERATE
+STEPS: tuple[str, ...] = tuple(step.value for step in Step)
 
-    if card is not None and card.status == "generated":
-        return Step.S3_RESTORE
+STAGE_KEYS: tuple[str, ...] = (
+    "transcription",
+    "anonymization",
+    "biomarkers",
+    "medical_card",
+    "soap",
+)
 
-    card_ready = (card is not None and card.status == "draft") if is_first_session else True
+_STEP_TO_STAGE: dict[str, str] = {
+    Step.S1.value: "transcription",
+    Step.S6_SANITIZE.value: "anonymization",
+    Step.S2.value: "biomarkers",
+    Step.S3_GENERATE.value: "medical_card",
+    Step.S3_RESTORE.value: "medical_card",
+    Step.S4_GENERATE.value: "soap",
+    Step.S4_RESTORE.value: "soap",
+    Step.MARK_DRAFTED.value: "soap",
+}
 
-    if session['status'] == "analyzed" and card_ready and note is None:
-        return Step.S4_GENERATE
+# Number of pipeline stages (transcription, anonymization, biomarkers) already
+# finished for each session status.
+_EARLY_PROGRESS: dict[str, int] = {
+    "uploaded": 0,
+    "transcribed": 1,
+    "sanitized": 2,
+    "analyzed": 3,
+    "drafted": 3,
+    "approved": 3,
+}
 
-    if note is not None and note.status == "generated":
+_SIMPLE_TRANSITIONS: dict[str, Step | None] = {
+    "uploaded": Step.S1,
+    "transcribed": Step.S6_SANITIZE,
+    "sanitized": Step.S2,
+    "drafted": None,
+    "approved": None,
+}
+
+
+def next_step(session: dict, card: dict | None, note: dict | None) -> Step | None:
+    """Return the next pipeline step for a session, or None if nothing is left.
+
+    ``card`` and ``note`` are repository records (dicts) or None. The medical
+    card is considered only for session #1.
+    """
+    status = session["status"]
+    if status in _SIMPLE_TRANSITIONS:
+        return _SIMPLE_TRANSITIONS[status]
+    if status != "analyzed":
+        raise ValueError(f"Unknown session status: {status!r}")
+
+    if session["session_number"] == 1:
+        if card is None:
+            return Step.S3_GENERATE
+        if card["status"] == "generated":
+            return Step.S3_RESTORE
+        card_ready = card["status"] in ("draft", "approved")
+    else:
+        card_ready = True
+
+    if note is None:
+        return Step.S4_GENERATE if card_ready else None
+    if note["status"] == "generated":
         return Step.S4_RESTORE
-
-    if note is not None and note.status == "draft" and card_ready:
+    if note["status"] in ("draft", "approved") and card_ready:
         return Step.MARK_DRAFTED
-
     return None
 
-def session_badge(session: dict, is_processing: bool) -> str | None:
-    if session['failed_step'] is not None:
-        return 'Помилка'
 
-    status = session['status']
+def session_badge(status: str, failed_step: str | None, soap_status: str | None = None) -> str | None:
+    """Neutral badge kind for one session: error / processing / review / approved."""
+    if failed_step:
+        return "error"
+    if status in ("uploaded", "transcribed", "sanitized", "analyzed"):
+        return "processing"
+    if status == "drafted":
+        return "review"
+    if status == "approved":
+        return "approved"
+    raise ValueError(f"Unknown session status: {status!r}")
 
-    match status:
-        case 'approved':
-            return 'Підтверджено'
-        case 'drafted':
-            return 'Чекає на розгляд'
 
-    if is_processing:
-        return 'Обробка запису'
-
-    return None
-
-def patient_badge(sessions: list[dict], active_ids: set[str]) -> str | None:
+def patient_badge(sessions: list[dict]) -> str | None:
+    """Badge kind for a patient. Priority: error, processing, review, approved."""
     if not sessions:
         return None
+    kinds = [session_badge(s["status"], s.get("failed_step")) for s in sessions]
+    for kind in ("error", "processing", "review"):
+        if kind in kinds:
+            return kind
+    return "approved"
 
-    active_ids = active_ids or set()
 
-    if any(s.get('failed_step') for s in sessions):
-        return 'Помилка'
+def stage_states(
+    status: str,
+    number: int,
+    failed_step: str | None,
+    card_status: str | None,
+    soap_status: str | None,
+) -> list[dict[str, str]]:
+    """State of each of the five processing stages.
 
-    if any(s['status'] == 'drafted' for s in sessions):
-        return 'Чекає розгляду'
+    Returns rows ``{"key": <STAGE_KEYS item>, "state": ...}`` where state is one
+    of ``done``, ``running``, ``pending``, ``not_needed``, ``error``.
+    ``running`` marks the first unfinished stage and is never set after a failure.
+    """
+    if status not in _EARLY_PROGRESS:
+        raise ValueError(f"Unknown session status: {status!r}")
+    finished = status in ("drafted", "approved")
+    early = _EARLY_PROGRESS[status]
 
-    if any(s['session_id'] in active_ids for s in sessions):
-        return 'Обробка запису'
+    done = {
+        "transcription": early >= 1,
+        "anonymization": early >= 2,
+        "biomarkers": early >= 3,
+        "medical_card": finished or card_status in ("draft", "approved"),
+        "soap": finished or soap_status in ("draft", "approved"),
+    }
+    states = {key: "done" if done[key] else "pending" for key in STAGE_KEYS}
+    if number >= 2:
+        states["medical_card"] = "not_needed"
 
-    if all(s['status'] == 'approved' for s in sessions):
-        return 'Підтверджено'
+    failed_stage = _STEP_TO_STAGE.get(failed_step) if failed_step else None
+    if failed_stage is not None:
+        index = STAGE_KEYS.index(failed_stage)
+        for key in STAGE_KEYS[index:]:
+            if states[key] != "not_needed":
+                states[key] = "pending"
+        states[failed_stage] = "error"
+    elif not failed_step:
+        for key in STAGE_KEYS:
+            if states[key] == "pending":
+                states[key] = "running"
+                break
+    return [{"key": key, "state": states[key]} for key in STAGE_KEYS]
 
-    return None
 
 def describe_stages(
-    session: dict,
-    card: dict | None = None,
-    note: dict | None = None,
-) -> list[dict]:
-    stage_names = [
-        "Транскрибація",
-        "Анонімізація тексту",
-        "Біомаркери голосу",
-        "Медкартка",
-        "SOAP-нотатка",
-    ]
-
-    status_order = {
-        "uploaded": 0,
-        "transcribed": 1,
-        "sanitized": 2,
-        "analyzed": 3,
-        "drafted": 5,
-        "approved": 5,
-    }
-
-    step_to_stage = {
-        Step.S1: 0,
-        Step.S6_SANITIZE: 1,
-        Step.S2: 2,
-        Step.S3_GENERATE: 3,
-        Step.S3_RESTORE: 3,
-        Step.S4_GENERATE: 4,
-        Step.S4_RESTORE: 4,
-        Step.MARK_DRAFTED: 4,
-    }
-
-    status = session["status"]
-    session_number = session["session_number"]
-    failed_step = session.get("failed_step")
-
-    stages = [
-        {"name": name, "status": "Очікує"}
-        for name in stage_names
-    ]
-
-    # Mark completed processing stages
-    progress = status_order[status]
-
-    for i in range(min(progress, 3)):
-        stages[i]["status"] = "Готово"
-
-    # Medical card is generated only for the first session
-    if session_number >= 2:
-        stages[3]["status"] = "Не потрібно"
-    elif status in ("drafted", "approved") or (
-            card is not None
-            and card["status"] in ("draft", "approved")
-    ):
-        stages[3]["status"] = "Готово"
-
-    # SOAP note is ready after restore
-    if status in ("drafted", "approved") or (
-            note is not None
-            and note["status"] in ("draft", "approved")
-    ):
-        stages[4]["status"] = "Готово"
-
-    # Show the failed stage
-    if failed_step is not None:
-        failed_stage = step_to_stage.get(failed_step)
-
-        if failed_stage is not None:
-            stages[failed_stage]["status"] = "Помилка"
-
-    return stages
+    session: dict[str, Any],
+    card: dict[str, Any] | None = None,
+    note: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
+    """Convenience wrapper around :func:`stage_states` for repository records."""
+    return stage_states(
+        session["status"],
+        session["session_number"],
+        session.get("failed_step"),
+        card["status"] if card else None,
+        note["status"] if note else None,
+    )
