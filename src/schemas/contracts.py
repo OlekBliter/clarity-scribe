@@ -64,6 +64,36 @@ EntityType = Literal["PERSON", "ADDRESS", "PHONE", "EMAIL", "ORG", "BIRTH_DATE",
 PLACEHOLDER_RE = re.compile(r"\[[^\[\]_\s]+_\d+\]")  # [NAME_1], [ADDRESS_2] …
 
 
+APOSTROPHES = "'’ʼ`´"
+
+
+def _original_pattern(original: str) -> str:
+    """Regex of a phrase that treats every apostrophe variant as one and any run of spaces as one space."""
+    parts = []
+    for chunk in re.split(r"(\s+)", original.strip()):
+        if chunk.isspace():
+            parts.append(r"\s+")
+        else:
+            parts.append("".join(f"[{APOSTROPHES}]" if ch in APOSTROPHES else re.escape(ch) for ch in chunk))
+    return "".join(parts)
+
+
+def find_original(original: str, text: str) -> list[tuple[int, int]]:
+    """Spans where ``original`` stands in the text as a whole word (case ignored; apostrophe variants and runs of
+    spaces are equal). The one search used by both the sanitiser's sweep and the leak check below, so they always
+    agree. A mere substring of a longer word ("суми" in "сумісний") is not a hit; neither is anything inside a
+    placeholder ("PER_1" in "[PER_1]")."""
+    if not original.strip():
+        return []
+    tags = [m.span() for m in PLACEHOLDER_RE.finditer(text)]
+    return [m.span() for m in re.finditer(rf"(?<!\w){_original_pattern(original)}(?!\w)", text, re.IGNORECASE)
+            if not any(start < m.end() and m.start() < end for start, end in tags)]
+
+
+def _leaks(original: str, text: str) -> bool:
+    return bool(find_original(original, text))
+
+
 class NerEntry(Strict):
     type: EntityType
     original: str = Field(min_length=1)
@@ -88,7 +118,7 @@ class S6SanitizeOut(Strict):
                 if ph not in self.map:
                     raise ValueError(f"{it.key}: placeholder {ph} is missing from map")
             for ph, e in self.map.items():
-                if e.original in it.text:  # primary privacy check
+                if _leaks(e.original, it.text):  # primary privacy check
                     raise ValueError(f"{it.key}: unmasked entity {ph} remains in text")
         return self
 

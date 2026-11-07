@@ -55,6 +55,10 @@ class NerMapManager:
                 return tag
         return None
 
+    def originals(self) -> dict:
+        """``{tag: original}`` of every known entity (including those from earlier segments and sessions)."""
+        return {tag: entity.original for tag, entity in self._entities.items()}
+
     def to_dict(self) -> dict:
         """``{tag: Entity}`` -> ``{tag: {"type", "original"}}``."""
         return {tag: {"type": e.type.value, "original": e.original} for tag, e in self._entities.items()}
