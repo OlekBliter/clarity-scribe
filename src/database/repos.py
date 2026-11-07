@@ -428,6 +428,20 @@ class SessionsRepo:
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
+    def update_date(
+        self, conn: sqlite3.Connection, session_id: str, session_date: str
+    ) -> None:
+        """Update the date entered for a session retry."""
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET session_date = ? WHERE session_id = ?",
+                (session_date, session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to update session date.") from database_error
+        if cursor.rowcount == 0:
+            raise RecordNotFoundError(f"Session '{session_id}' was not found.")
+
     def delete(self, conn: sqlite3.Connection, session_id: str) -> None:
         self.get(conn, session_id)
         SoapNotesRepo().delete(conn, session_id)
