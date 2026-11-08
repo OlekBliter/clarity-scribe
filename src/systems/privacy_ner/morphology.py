@@ -63,6 +63,22 @@ class UkrainianMorphology:
         function, has_name_grammeme, _ = self._kind(word)
         return not function and has_name_grammeme
 
+    def is_unambiguous_adjective(self, word: str) -> bool:
+        """True when all returned analyses describe a known adjective."""
+        normalized = (
+            word.lower()
+            .replace("’", "'")
+            .replace("ʼ", "'")
+        )
+        parses = self._analyzer.parse(normalized)
+
+        return bool(parses) and all(
+            parsed.is_known
+            and parsed.tag.POS in {"ADJF", "ADJS"}
+            and not (NAME_GRAMMEMES & set(parsed.tag.grammemes))
+            for parsed in parses
+        )
+
     def _kind(self, word: str) -> tuple:
         """(is function word, has a name grammeme, is unknown to the dictionary), cached."""
         low = word.lower().replace("’", "'")

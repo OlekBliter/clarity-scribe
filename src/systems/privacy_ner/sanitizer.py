@@ -4,12 +4,41 @@ from .config import NerConfig
 from .map_manager import NerMapManager
 from .models import EntityType, Span, TagMask
 from .morphology import UkrainianMorphology
-from src.schemas.contracts import PLACEHOLDER_RE, find_original
 
 EDGE_CHARS = " \t\n,.;:!?"
 TAG_RE = re.compile(r"\[[A-Za-z]+_\d+\]")
 NUMBER_RE = re.compile(r"\s*(?:№|N)\s?\d+")
 SENTENCE_BREAKS = ".!?…\n:—-\"«"
+PLACEHOLDER_RE = re.compile(r"\[[^\[\]_\s]+_\d+\]")
+APOSTROPHES = "'’ʼ`´"
+
+
+def _original_pattern(original: str) -> str:
+    parts = []
+    for chunk in re.split(r"(\s+)", original.strip()):
+        if chunk.isspace():
+            parts.append(r"\s+")
+        else:
+            parts.append("".join(
+                f"[{APOSTROPHES}]" if char in APOSTROPHES else re.escape(char)
+                for char in chunk
+            ))
+    return "".join(parts)
+
+
+def find_original(original: str, text: str) -> list[tuple[int, int]]:
+    if not original.strip():
+        return []
+    tags = [match.span() for match in PLACEHOLDER_RE.finditer(text)]
+    return [
+        match.span()
+        for match in re.finditer(
+            rf"(?<!\w){_original_pattern(original)}(?!\w)",
+            text,
+            re.IGNORECASE,
+        )
+        if not any(start < match.end() and match.start() < end for start, end in tags)
+    ]
 
 
 class Sanitizer:
@@ -22,16 +51,24 @@ class Sanitizer:
     def __init__(self, extractors: list, morphology: UkrainianMorphology, config: NerConfig) -> None:
         self._extractors = extractors
         self._morphology = morphology
+        self._role_modifier_keys = frozenset(
+            word.strip().lower()
+            for word in config.role_modifiers
+            if word.strip()
+        )
         self._min_word_len = config.min_word_len
         self._keep_keys = frozenset(
             key
             for word in config.keep_words
-            for key in morphology.keys(word)
+            if word.strip()
+            for key in morphology.keys(word.strip())
         )
+
         self._ignore_keys = frozenset(
             key
             for word in config.ignore_words
-            for key in morphology.keys(word)
+            if word.strip()
+            for key in morphology.keys(word.strip())
         )
 
     def sanitize(self, texts: list[str], manager: NerMapManager) -> list[str]:
@@ -169,22 +206,76 @@ class Sanitizer:
         return merged
 
     def _without_keep_words(self, span: Span, text: str) -> Span | None:
-        """Cut kinship words ("баба", "лікар") from the edges of a person span; they stay visible."""
-        words = list(self._morphology.find_words(text[span.start:span.end]))
+        """Trim keep words and reject a remaining generic role modifier."""
+        fragment = text[span.start:span.end]
+        words = list(self._morphology.find_words(fragment))
+
         if span.entity_type != EntityType.PERSON:
-            has_digit = any(c.isdecimal() for c in text[span.start:span.end])
-            return span if has_digit or not self._only_common_words(words) else None
-        first, last = 0, len(words)
-        while first < last and self._morphology.keys(words[first].group()) & self._keep_keys:
+            has_digit = any(char.isdecimal() for char in fragment)
+            if has_digit or not self._only_common_words(words):
+                return span
+            return None
+
+        first = 0
+        last = len(words)
+        while (
+            first < last
+            and self._morphology.keys(words[first].group())
+            & self._keep_keys
+        ):
             first += 1
-        while last > first and self._morphology.keys(words[last - 1].group()) & self._keep_keys:
+        while (
+            last > first
+            and self._morphology.keys(words[last - 1].group())
+            & self._keep_keys
+        ):
             last -= 1
+
         if first == last:
             return None
-        if not any(self._is_plausible_name(w.group()) for w in words[first:last]):
-            return None  # the model tagged a pronoun or an adjective ("я", "сімейному")
-        return Span(span.start + words[first].start(), span.start + words[last - 1].end(),
-                    span.entity_type, span.priority)
+
+        if (
+            not any(char.isdecimal() for char in fragment)
+            and self._is_role_modifier_remainder(words, first, last)
+        ):
+            return None
+
+        if not any(
+            self._is_plausible_name(word.group())
+            for word in words[first:last]
+        ):
+            return None
+
+        return Span(
+            span.start + words[first].start(),
+            span.start + words[last - 1].end(),
+            span.entity_type,
+            span.priority,
+        )
+
+    def _is_role_modifier_remainder(
+        self,
+        words: list[re.Match],
+        first: int,
+        last: int,
+    ) -> bool:
+        """Recognize a single role modifier left after trimming keep words."""
+        if last - first != 1:
+            return False
+
+        trimmed_keep_words = first > 0 or last < len(words)
+        if not trimmed_keep_words:
+            return False
+
+        word = words[first].group()
+
+        if not (
+            self._morphology.keys(word)
+            & self._role_modifier_keys
+        ):
+            return False
+
+        return self._morphology.is_unambiguous_adjective(word)
 
     @staticmethod
     def _retype_digits(span: Span, text: str) -> Span:
