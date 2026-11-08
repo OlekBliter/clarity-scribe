@@ -5,6 +5,18 @@ from .models import Entity, EntityType
 from .morphology import UkrainianMorphology
 
 TAG_NUMBER_RE = re.compile(r"^\[([A-Za-z]+)_(\d+)\]$")
+MENTION_NUMBER_RE = re.compile(
+    r"\d+(?:[^\W\d_])?(?:\s*[/\-]\s*(?:\d+(?:[^\W\d_])?|[^\W\d_]))*"
+)
+
+
+def number_signature(text: str) -> tuple[str, ...]:
+    """Keep house/institution numbers, letter suffixes and fractions distinct."""
+    return tuple(
+        re.sub(r"\s+", "", match.group()).casefold()
+        for match in MENTION_NUMBER_RE.finditer(text)
+    )
+
 
 def entities_from_dict(ner_map: dict) -> dict:
     """``{tag: {"type", "original"}}`` -> ``{tag: Entity}``."""
@@ -112,6 +124,10 @@ class NerMapManager:
             entity = self._entities[tag]
             if entity.type != entity_type:
                 continue
+            if entity_type in (EntityType.ADDRESS, EntityType.ORG):
+                # An unnumbered mention is ambiguous once numbered entities exist.
+                if number_signature(mention) != number_signature(entity.original):
+                    continue
             known = [self._morphology.keys(w) for w in self._words(entity.original)]
             shorter, longer = (words, known) if len(words) <= len(known) else (known, words)
             if all(any(keys & other for other in longer) for keys in shorter):

@@ -10,6 +10,7 @@ TAG_RE = re.compile(r"\[[A-Za-z]+_\d+\]")
 NUMBER_RE = re.compile(r"\s*(?:№|N)\s?\d+")
 SENTENCE_BREAKS = ".!?…\n:—-\"«"
 PLACEHOLDER_RE = re.compile(r"\[[^\[\]_\s]+_\d+\]")
+ROLE_SEPARATOR_RE = re.compile(r"(?:[ \t\u00a0]+|[-‐‑–])")
 APOSTROPHES = "'’ʼ`´"
 
 
@@ -55,6 +56,17 @@ class Sanitizer:
             word.strip().lower()
             for word in config.role_modifiers
             if word.strip()
+        )
+        self._role_keys = frozenset(
+            key
+            for word in config.role_words
+            if word.strip()
+            for key in morphology.keys(word.strip())
+        )
+        self._person_role_patterns = tuple(
+            self._role_phrase_keys(phrase)
+            for phrase in config.person_role_phrases
+            if phrase.strip()
         )
         self._min_word_len = config.min_word_len
         self._keep_keys = frozenset(
@@ -105,10 +117,15 @@ class Sanitizer:
         spans = self._outside_tags([s for extractor in self._extractors for s in extractor.extract(text)], text)
         masks = []
         merged = self._merge(spans, text)
+        role_ranges = (
+            self._role_ranges(text)
+            if any(span.entity_type == EntityType.PERSON for span in merged)
+            else []
+        )
         for index, span in enumerate(merged):
             limit = merged[index + 1].start if index + 1 < len(merged) else len(text)
             span = self._with_number(self._retype_digits(span, text), text, limit)
-            span = self._without_keep_words(span, text)
+            span = self._without_keep_words(span, text, role_ranges)
             if span:
                 masks.append(TagMask(span.start, span.end,
                                      manager.tag_for(text[span.start:span.end], span.entity_type)))
@@ -205,8 +222,93 @@ class Sanitizer:
                 merged.append(Span(start, end, winner.entity_type, winner.priority))
         return merged
 
-    def _without_keep_words(self, span: Span, text: str) -> Span | None:
-        """Trim keep words and reject a remaining generic role modifier."""
+    def _role_phrase_keys(self, text: str) -> tuple[frozenset[str], ...]:
+        text = re.sub(r"[-‐‑–—]", " ", text)
+        return tuple(
+            self._morphology.keys(match.group())
+            for match in self._morphology.find_words(text)
+        )
+
+    def _role_ranges(self, text: str) -> list[tuple[int, int]]:
+        """Locate roles and their adjacent allowed modifiers in original offsets."""
+        # Replacing each dash by one space preserves offsets and splits compounds.
+        normalized = re.sub(r"[-‐‑–—]", " ", text)
+        words = list(self._morphology.find_words(normalized))
+        keys = [self._morphology.keys(word.group()) for word in words]
+        modifiers = [
+            bool(word_keys & self._role_modifier_keys)
+            and self._morphology.is_role_modifier(word.group(), self._role_modifier_keys)
+            for word, word_keys in zip(words, keys)
+        ]
+        connected = [
+            bool(ROLE_SEPARATOR_RE.fullmatch(text[left.end():right.start()]))
+            for left, right in zip(words, words[1:])
+        ]
+        ranges = []
+        for index, word_keys in enumerate(keys):
+            end = index + 1 if word_keys & self._role_keys else index
+            for pattern in self._person_role_patterns:
+                stop = index + len(pattern)
+                if (
+                    stop <= len(words)
+                    and all(connected[index:stop - 1])
+                    and all(
+                        actual & expected
+                        for actual, expected in zip(keys[index:stop], pattern)
+                    )
+                ):
+                    end = max(end, stop)
+            if end == index:
+                continue
+            start = index
+            while start > 0 and connected[start - 1] and modifiers[start - 1]:
+                start -= 1
+            ranges.append((words[start].start(), words[end - 1].end()))
+
+        # Combine overlapping titles and compounds such as "лікар-психіатр".
+        joined = []
+        for start, end in sorted(ranges):
+            if joined and (
+                start <= joined[-1][1]
+                or ROLE_SEPARATOR_RE.fullmatch(text[joined[-1][1]:start])
+            ):
+                joined[-1] = (joined[-1][0], max(joined[-1][1], end))
+            else:
+                joined.append((start, end))
+        return joined
+
+    @staticmethod
+    def _trim_role_edges(
+        span: Span,
+        text: str,
+        role_ranges: list[tuple[int, int]],
+    ) -> Span | None:
+        """Trim only role ranges touching candidate edges, preserving name spans."""
+        start, end = span.start, span.end
+        for low, high in role_ranges:
+            if low <= start < high:
+                start = min(high, end)
+            if low < end <= high:
+                end = max(low, start)
+        while start < end and text[start] in EDGE_CHARS + "-‐‑–—":
+            start += 1
+        while end > start and text[end - 1] in EDGE_CHARS + "-‐‑–—":
+            end -= 1
+        if start >= end:
+            return None
+        return Span(start, end, span.entity_type, span.priority)
+
+    def _without_keep_words(
+        self,
+        span: Span,
+        text: str,
+        role_ranges: list[tuple[int, int]],
+    ) -> Span | None:
+        """Trim supported roles and keep words from PERSON candidate edges."""
+        if span.entity_type == EntityType.PERSON:
+            span = self._trim_role_edges(span, text, role_ranges)
+            if span is None:
+                return None
         fragment = text[span.start:span.end]
         words = list(self._morphology.find_words(fragment))
 
@@ -234,12 +336,6 @@ class Sanitizer:
         if first == last:
             return None
 
-        if (
-            not any(char.isdecimal() for char in fragment)
-            and self._is_role_modifier_remainder(words, first, last)
-        ):
-            return None
-
         if not any(
             self._is_plausible_name(word.group())
             for word in words[first:last]
@@ -252,30 +348,6 @@ class Sanitizer:
             span.entity_type,
             span.priority,
         )
-
-    def _is_role_modifier_remainder(
-        self,
-        words: list[re.Match],
-        first: int,
-        last: int,
-    ) -> bool:
-        """Recognize a single role modifier left after trimming keep words."""
-        if last - first != 1:
-            return False
-
-        trimmed_keep_words = first > 0 or last < len(words)
-        if not trimmed_keep_words:
-            return False
-
-        word = words[first].group()
-
-        if not (
-            self._morphology.keys(word)
-            & self._role_modifier_keys
-        ):
-            return False
-
-        return self._morphology.is_unambiguous_adjective(word)
 
     @staticmethod
     def _retype_digits(span: Span, text: str) -> Span:

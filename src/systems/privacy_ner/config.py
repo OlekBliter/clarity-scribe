@@ -24,9 +24,8 @@ TAG_PREFIXES = {
     EntityType.OTHER_ID: "ID",
 }
 
-# Kinship and role words stay visible
-# General roles and professions trimmed from the edges of PERSON spans.
-KEEP_WORDS = (
+# Family and social terms remain visible at the edges of PERSON candidates.
+KINSHIP_AND_SOCIAL_WORDS = (
     # Family
     "мама", "мати", "тато", "батько",
     "баба", "бабуся", "дід", "дідусь",
@@ -44,6 +43,10 @@ KEEP_WORDS = (
     "друг", "подруга", "колега",
     "сусід", "сусідка",
     "людина",
+)
+
+# A role head is required before adjacent modifiers may remain visible.
+ROLE_WORDS = (
     "фахівець", "фахівчиня",
     "спеціаліст", "спеціалістка",
     "пацієнт", "пацієнтка",
@@ -127,6 +130,8 @@ KEEP_WORDS = (
     "кур'єр", "кур'єрка",
 )
 
+KEEP_WORDS = KINSHIP_AND_SOCIAL_WORDS + ROLE_WORDS
+
 # General terms for places, institutions, and contacts.
 # A candidate is rejected only when all its words are function words
 # or belong to this list, and it contains no digits.
@@ -189,6 +194,13 @@ ROLE_MODIFIERS = (
     "позаштатний",
 )
 
+# Multiword role heads whose final word is also a kinship term.
+# Ordinary titles are composed from ROLE_MODIFIERS + ROLE_WORDS.
+PERSON_ROLE_PHRASES = (
+    "медична сестра",
+    "медичний брат",
+)
+
 # Local GLiNER weights live next to the other models: <project root>/models/gliner_multi-v2.1.
 # The location is set by GLINER_MODEL_DIR (see .env.example); the default matches the example value.
 DEFAULT_GLINER_DIR = os.path.join("models", "gliner_multi-v2.1")
@@ -210,4 +222,6 @@ class NerConfig:
     tag_prefixes: dict = field(default_factory=lambda: dict(TAG_PREFIXES))
     keep_words: tuple = KEEP_WORDS
     ignore_words: tuple = IGNORE_WORDS
+    role_words: tuple[str, ...] = ROLE_WORDS
     role_modifiers: tuple[str, ...] = ROLE_MODIFIERS
+    person_role_phrases: tuple[str, ...] = PERSON_ROLE_PHRASES
