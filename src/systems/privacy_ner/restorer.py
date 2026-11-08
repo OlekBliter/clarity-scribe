@@ -1,13 +1,14 @@
 import re
 
 from .config import NerConfig
+from .exceptions import InvalidRequestError
 from .models import Entity, EntityType
 from .morphology import UkrainianMorphology
 
 class Restorer:
     """Puts the original data back into the text the LLM wrote. Tolerates the usual LLM distortions: ``[PER_1]``, ``PER_1``, ``[ PER-1 ]``, ``[per_1]`` and a
     Cyrillic ending glued to the tag (``[PER_1]ом``). The ending is dropped; the case is guessed
-    from the preceding preposition (nominative by default). Unknown tags stay visible."""
+    from the preceding preposition (nominative by default). Unknown recognized tags raise an error."""
 
     def __init__(self, morphology: UkrainianMorphology, config: NerConfig) -> None:
         self._morphology = morphology
@@ -18,7 +19,8 @@ class Restorer:
         self._ending_re = re.compile(r"[а-яіїєґ']*", re.IGNORECASE)
 
     def restore(self, text: str, entities: dict) -> str:
-        parts, position, unknown = [], 0, 0
+        parts, position = [], 0
+        unknown: set[str] = set()
         for match in self._tag_re.finditer(text):
             tag = f"[{(match.group('p1') or match.group('p2')).upper()}_{int(match.group('n1') or match.group('n2'))}]"
             parts.append(text[position:match.start()])
@@ -28,7 +30,11 @@ class Restorer:
             else:
                 parts.append(match.group())
                 position = match.end()
-                unknown += 1
+                unknown.add(tag)
+        if unknown:
+            raise InvalidRequestError(
+                f"restore cannot resolve placeholders: {', '.join(sorted(unknown))}"
+            )
         return "".join(parts) + text[position:]
 
     def _render(self, entity: Entity, preceding_text: str) -> str:

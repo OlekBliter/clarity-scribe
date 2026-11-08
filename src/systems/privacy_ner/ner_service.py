@@ -63,9 +63,16 @@ class PrivacyNerService:
             texts, ner_map = self._sanitize(texts, ner_map)
             result = {"items": [{"key": k, "text": t} for k, t in zip(keys, texts)], "map": ner_map}
             return S6SanitizeOut.model_validate(result).model_dump()
-        texts = self._restore(texts, ner_map)
-        if any(PLACEHOLDER_RE.search(text) for text in texts):
-            raise InvalidRequestError("restore left unresolved placeholders")
+        texts = self._restore(texts, ner_map, keys)
+        unresolved = {
+            key: sorted(set(PLACEHOLDER_RE.findall(text)))
+            for key, text in zip(keys, texts)
+            if PLACEHOLDER_RE.search(text)
+        }
+        if unresolved:
+            raise InvalidRequestError(
+                f"restore left unresolved placeholders: {unresolved}"
+            )
         result = {"items": [{"key": k, "text": t} for k, t in zip(keys, texts)]}
         return S6RestoreOut.model_validate(result).model_dump()
 
@@ -74,6 +81,18 @@ class PrivacyNerService:
         result = self._sanitizer.sanitize(texts, manager)
         return result, manager.to_dict()
 
-    def _restore(self, texts: list[str], ner_map: dict) -> list[str]:
+    def _restore(
+        self,
+        texts: list[str],
+        ner_map: dict,
+        keys: list[str] | None = None,
+    ) -> list[str]:
         entities = entities_from_dict(ner_map)
-        return [self._restorer.restore(text, entities) for text in texts]
+        result = []
+        for index, text in enumerate(texts):
+            try:
+                result.append(self._restorer.restore(text, entities))
+            except InvalidRequestError as error:
+                key = keys[index] if keys is not None else str(index)
+                raise InvalidRequestError(f"{key}: {error}") from error
+        return result
