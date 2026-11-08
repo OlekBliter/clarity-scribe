@@ -56,7 +56,8 @@ class Gemini(LLM):
     def query(
             self,
             prompt: str,
-            schema: Optional[type[BaseModel] | Any] = None
+            schema: Optional[type[BaseModel] | Any] = None,
+            system_instruction: Optional[str] = None,
     ) -> str:
         config: dict[str, Any] = {"response_mime_type": "application/json"}
         target_schema = schema or self.response_schema
@@ -66,6 +67,9 @@ class Gemini(LLM):
                 target_schema if isinstance(target_schema, dict)
                 else TypeAdapter(target_schema).json_schema()
             )
+
+        if system_instruction:
+            config["system_instruction"] = system_instruction
 
         try:
             response = self._generate_content(prompt, config)

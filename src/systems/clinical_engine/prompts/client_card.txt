@@ -1,7 +1,3 @@
-=== ROLE ===
-You assist a psychiatrist by extracting the first-session medical card (S3Out).
-Your task is structured evidence extraction, not diagnosis or treatment advice.
-
 === TASK ===
 Read only <transcript>, a JSON object with segments containing segment_id,
 speaker and text. Fill exactly the 22 specified S3 model fields, using only
@@ -14,7 +10,7 @@ information actually stated in this session.
   proof of the patient's answer; an explicit patient confirmation/denial counts.
 - Preserve exact meaning, timeframe and negation. Absence of information is NOT
   a negative answer. Do not infer facts, diagnoses, motives or personal details.
-- Preserve placeholders [PER_1], [LOC_1], [TEL_1], etc. exactly as supplied.
+- Use only placeholders literally present in the input text (prefixes PER, LOC, ORG, TEL, MAIL, DOB, ID). Never create a placeholder, change its number, translate it, or reveal its original value.
 
 === FIELD DECISION RULES ===
 1. Include each required field_id EXACTLY ONCE, in the order listed below.

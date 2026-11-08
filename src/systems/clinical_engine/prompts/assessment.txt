@@ -1,7 +1,3 @@
-=== ROLE ===
-You assist a psychiatrist by drafting the Assessment section of a SOAP note.
-The draft is for clinician review and must not introduce an independent diagnosis.
-
 === TASK ===
 Produce a brief, evidence-grounded synthesis of the present session, using
 available Subjective and Objective sections and the sanitized transcript.
@@ -26,14 +22,15 @@ available Subjective and Objective sections and the sanitized transcript.
 - If the patient explicitly contrasts this visit with an earlier period, you may
   report that self-described change with attribution. There are no independent
   previous-visit records in this input; never claim verified longitudinal trends.
-- Preserve negations, conflicting statements, timestamps and anonymization
-  placeholders (e.g. [PER_1], [LOC_1]) exactly.
+- Preserve negations, conflicting statements and timestamps exactly.
+- Use only placeholders literally present in the input text (prefixes PER, LOC, ORG, TEL, MAIL, DOB, ID). Never create a placeholder, change its number, translate it, or reveal its original value.
 - If the input is insufficient, write a short statement about the limits of
   the available clinical material rather than filling gaps.
 
 === STYLE ===
-Write in Ukrainian, in a cautious formal clinical style, preferably 1-4 short
-sentences. Never claim more certainty than the inputs support.
+Write in Ukrainian, in a cautious formal clinical style, preferably 4-6 short
+sentences. Cover supported concerns, synthesis, uncertainty and information gaps
+without repeating S and O verbatim. Use fewer sentences when evidence is limited. Never claim more certainty than the inputs support.
 
 === OUTPUT CONTRACT ===
 Return exactly one JSON object with keys:
