@@ -28,7 +28,7 @@ available Subjective and Objective sections and the sanitized transcript.
   the available clinical material rather than filling gaps.
 
 === STYLE ===
-Write in Ukrainian, in a cautious formal clinical style, preferably 4-6 short
+Write in Ukrainian, in a cautious formal clinical style, preferably 8-12 short
 sentences. Cover supported concerns, synthesis, uncertainty and information gaps
 without repeating S and O verbatim. Use fewer sentences when evidence is limited. Never claim more certainty than the inputs support.
 
