@@ -431,6 +431,25 @@ QListWidget#Transcript::item:selected {
    14. ЗОНА: МЕДКАРТКА ТА ДИНАМІКА                    (Лаврик)
    =================================================================== */
 
+SparklineChart {
+    qproperty-lineColor: #0F766E;
+    qproperty-gridColor: #E2E8F0;
+    color: #64748B;
+}
+
+
+QWidget#DynamicsScreen QFrame#Card:hover {
+    border-color: #99F6E4;
+}
+QLabel#DynamicsPointBubble {
+    background-color: #134E4A;
+    color: #FFFFFF;
+    border: 1px solid #0F766E;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+}
+
 
 /* ===================================================================
    15. ЗОНА: НОВИЙ ПАЦІЄНТ, НАЛАШТУВАННЯ, АРХІВ       (Вероніка)

@@ -37,5 +37,34 @@ SESSION_ROW_TITLE = "Сесія {number} • {date}"
 # --- Кобильник: Екран сесії ---
 
 # --- Лаврик: Медкартка, Динаміка ---
+DYNAMICS_TITLE = "Трекінг динаміки"
+DYNAMICS_PATIENT_TITLE = "Трекінг динаміки • {name}"
+DYNAMICS_BREADCRUMB = "Динаміка"
+DYNAMICS_SESSIONS = "Аналіз за сесіями {sessions}"
+DYNAMICS_EXPORT = "Експорт звіту"
+DYNAMICS_EXPORT_SOON = "Скоро"
+DYNAMICS_LOADING = "Завантаження динаміки…"
+DYNAMICS_EMPTY = "Для відображення динаміки потрібні щонайменше 2 підтверджені візити."
+DYNAMICS_ERROR = "Не вдалося завантажити динаміку."
+DYNAMICS_NOTE = "Підказка, а не діагноз • графіки доступні від 2 підтверджених візитів."
+DYNAMICS_SLOPE = "нахил: {value:+.4g} / візит"
+DYNAMICS_SLOPE_WITH_UNIT = "нахил: {value:+.4g} {unit} / візит"
+DYNAMICS_NO_SLOPE = "нахил: —"
+DYNAMICS_POINT_TOOLTIP = "Сесія {session}: {value} {unit}"
+DYNAMICS_NEEDS_SESSIONS = "Для перегляду динаміки потрібні щонайменше 2 підтверджені сесії."
+DYNAMICS_DIRECTIONS = {"up": "↑ зростає", "down": "↓ зменшується", "stable": "→ стабільно"}
+DYNAMICS_METRIC_NAMES = {
+    "pause_ratio": "Частка пауз",
+    "speech_rate_syllables_per_sec": "Темп мовлення",
+    "f0_variability_sd": "Варіативність F0",
+    "psychomotor_retardation_index": "Індекс психомоторної загальмованості",
+}
+DYNAMICS_PERCENT_UNIT = "%"
+DYNAMICS_POINT_BUBBLE = "Сесія {session}\n{value} {unit}"
+DYNAMICS_SLOPE_UNITS = {
+    "pause_ratio": "в.п.",
+    "speech_rate_syllables_per_sec": "складів/с",
+    "f0_variability_sd": "Гц",
+}
 
 # --- Вероніка: Новий пацієнт, Налаштування, Архів ---
