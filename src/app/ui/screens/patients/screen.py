@@ -1,4 +1,8 @@
-"""Список пацієнтів (еталонний екран: за ним робимо решту)."""
+"""Список пацієнтів (еталонний екран: за ним робимо решту).
+
+Фасад: list_patients(query) ->
+  [{"patient_id", "name", "subtitle", "badge": review|approved|processing|error|None}]
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -10,24 +14,10 @@ from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import clear_layout
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
+from src.app.ui.widgets.badge import badge_for
 from src.app.ui.widgets.buttons import primary_button
 from src.app.ui.widgets.card import ListItemCard
 from src.app.ui.widgets.search_input import SearchInput
-
-
-def _to_row(p: dict) -> dict:
-    """Єдине місце, де UI знає формат відповіді list_patients.
-    Звірити ключі зі stub.py і поправити тут, якщо відрізняються."""
-    badge = p.get("badge") or {}
-    if isinstance(badge, str):
-        badge = {"text": badge}
-    return {
-        "id": p.get("id"),
-        "title": p.get("name") or strings.NO_NAME,
-        "subtitle": p.get("subtitle", ""),
-        "badge_text": badge.get("text", ""),
-        "badge_variant": badge.get("variant", "neutral"),
-    }
 
 
 class PatientsScreen(BaseScreen):
@@ -82,10 +72,9 @@ class PatientsScreen(BaseScreen):
             empty.setObjectName("Muted")
             self._list.addWidget(empty)
             return
-        for raw in items:
-            row = _to_row(raw)
-            card = ListItemCard(row["title"], row["subtitle"],
-                                row["badge_text"], row["badge_variant"])
-            card.clicked.connect(lambda pid=row["id"]: self.router.go(
+        for p in items:
+            text, variant = badge_for(p.get("badge"))
+            card = ListItemCard(p.get("name") or strings.NO_NAME, p.get("subtitle", ""), text, variant)
+            card.clicked.connect(lambda pid=p["patient_id"]: self.router.go(
                 Route.PATIENT_PROFILE, patient_id=pid))
             self._list.addWidget(card)

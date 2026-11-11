@@ -1,0 +1,442 @@
+/* ===================================================================
+   ClarityScribe · theme.qss  (ЄДИНЕ місце з кольорами й шрифтами)
+   Палітра: slate (нейтральні) + teal (акцент).
+   Секції 1-11: спільна база (змінює лише тімлід).
+   Секції 12-13: спільні додатки. Секція 20+: зони екранів, кожен
+   розробник правки лише у своїй зоні, щоб не було merge-конфліктів.
+   =================================================================== */
+
+/* ===================================================================
+   1. ГЛОБАЛЬНІ СТИЛІ
+   =================================================================== */
+QWidget {
+    color: #0F172A;
+    font-size: 14px;
+}
+
+QMainWindow, QWidget#ContentArea {
+    background-color: #F8FAFC;
+}
+
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+QToolTip {
+    background-color: #0F172A;
+    color: #FFFFFF;
+    border: none;
+    padding: 4px 8px;
+}
+
+QDialog, QMessageBox {
+    background-color: #FFFFFF;
+}
+
+/* ===================================================================
+   2. ЛЕЙБЛИ ТА ТЕКСТОВІ ЕЛЕМЕНТИ
+   =================================================================== */
+QLabel#ScreenTitle {
+    color: #0F172A;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+QLabel#SectionTitle {
+    color: #0F172A;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#CardTitle {
+    color: #0F172A;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLabel#Subtitle {
+    color: #475569;
+    font-size: 14px;
+}
+
+QLabel#Muted, QLabel#Breadcrumb {
+    color: #64748B;
+    font-size: 12px;
+}
+
+/* ===================================================================
+   3. БІЧНА ПАНЕЛЬ (SIDEBAR)
+   =================================================================== */
+QWidget#Sidebar {
+    background-color: #0F172A;
+}
+
+QLabel#Logo {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 8px 4px;
+}
+
+QLabel#SidebarNote {
+    color: #94A3B8;
+    font-size: 11px;
+}
+
+QPushButton#SidebarButton {
+    background-color: transparent;
+    color: #94A3B8;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: left;
+    font-weight: 500;
+}
+
+QPushButton#SidebarButton:hover {
+    background-color: #1E293B;
+    color: #F8FAFC;
+}
+
+QPushButton#SidebarButton[active="true"] {
+    background-color: #1E293B;
+    color: #2DD4BF;
+    font-weight: 600;
+}
+
+/* ===================================================================
+   4. ВЕРХНЯ ШАПКА ТА СТАТУС-БАР
+   =================================================================== */
+QWidget#Header {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+QStatusBar {
+    background-color: #FFFFFF;
+    color: #64748B;
+    border-top: 1px solid #E2E8F0;
+}
+
+/* ===================================================================
+   5. ПОЛЯ ВВОДУ (QLineEdit, QTextEdit, QComboBox, QDateEdit)
+   =================================================================== */
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox, QDateEdit {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+QLineEdit, QTextEdit, QPlainTextEdit {
+    placeholder-text-color: #94A3B8;
+}
+
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+    border: 2px solid #0D9488;
+    padding: 7px 11px;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    selection-background-color: #F0FDFA;
+    selection-color: #0F172A;
+}
+
+QCheckBox {
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #0D9488;
+    border-color: #0D9488;
+}
+
+/* ===================================================================
+   6. КНОПКИ (Primary, Secondary, Outline, Danger, Disabled)
+   =================================================================== */
+QPushButton#PrimaryButton {
+    background-color: #0D9488;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-weight: 600;
+}
+
+QPushButton#PrimaryButton:hover {
+    background-color: #0F766E;
+}
+
+QPushButton#PrimaryButton:pressed {
+    background-color: #115E59;
+}
+
+QPushButton#SecondaryButton {
+    background-color: #F1F5F9;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+
+QPushButton#SecondaryButton:hover {
+    background-color: #E2E8F0;
+    color: #0F172A;
+}
+
+QPushButton#OutlineButton {
+    background-color: #FFFFFF;
+    color: #0D9488;
+    border: 1px solid #0D9488;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+
+QPushButton#OutlineButton:hover {
+    background-color: #F0FDFA;
+}
+
+QPushButton#DangerButton {
+    background-color: #FFFFFF;
+    color: #B91C1C;
+    border: 1px solid #FCA5A5;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+
+QPushButton#DangerButton:hover {
+    background-color: #FEF2F2;
+    border-color: #F87171;
+}
+
+QPushButton:disabled {
+    background-color: #E2E8F0;
+    color: #94A3B8;
+    border-color: #E2E8F0;
+}
+
+/* ===================================================================
+   7. КАРТКИ ТА КОНТЕЙНЕРИ (Cards)
+   =================================================================== */
+QFrame#Card, QFrame#PatientCard {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+}
+
+QFrame#PatientCard:hover {
+    border-color: #0D9488;
+}
+
+/* Підсвітка в медкартці: "потребує уваги" та "суперечливо" */
+QFrame#CardDanger {
+    background-color: #FEF2F2;
+    border: 1px solid #FCA5A5;
+    border-radius: 12px;
+}
+
+QFrame#CardWarning {
+    background-color: #FFFBEB;
+    border: 1px solid #FCD34D;
+    border-radius: 12px;
+}
+
+/* Підсумковий блок (динаміка) */
+QFrame#SummaryBox {
+    background-color: #F0FDFA;
+    border: 1px solid #99F6E4;
+    border-radius: 12px;
+}
+
+/* ===================================================================
+   8. БЕЙДЖІ ТА ЧІПИ (variant = success | warning | info | danger | neutral)
+   =================================================================== */
+QLabel#Badge {
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    background-color: #F1F5F9;
+    color: #475569;
+}
+
+QLabel#Badge[variant="success"] { background-color: #DCFCE7; color: #15803D; }
+QLabel#Badge[variant="warning"] { background-color: #FEF3C7; color: #B45309; }
+QLabel#Badge[variant="info"]    { background-color: #DBEAFE; color: #1D4ED8; }
+QLabel#Badge[variant="danger"]  { background-color: #FEE2E2; color: #B91C1C; }
+QLabel#Badge[variant="neutral"] { background-color: #F1F5F9; color: #475569; }
+
+/* Чіп біомаркера / тегу (той самий набір variant) */
+QLabel#Chip {
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    background-color: #F1F5F9;
+    color: #475569;
+}
+
+QLabel#Chip[variant="danger"]  { background-color: #FEE2E2; color: #B91C1C; }
+QLabel#Chip[variant="warning"] { background-color: #FEF3C7; color: #B45309; }
+QLabel#Chip[variant="info"]    { background-color: #DBEAFE; color: #1D4ED8; }
+QLabel#Chip[variant="success"] { background-color: #DCFCE7; color: #15803D; }
+
+/* Кнопка-джерело [07:45] */
+QPushButton#SourceChip {
+    background-color: #F1F5F9;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 11px;
+}
+
+QPushButton#SourceChip:hover {
+    background-color: #F0FDFA;
+    border-color: #0D9488;
+    color: #0F766E;
+}
+
+/* ===================================================================
+   9. DROP-ЗОНА (File Upload)
+   =================================================================== */
+QFrame#DropZone {
+    background-color: #FFFFFF;
+    border: 2px dashed #CBD5E1;
+    border-radius: 12px;
+}
+
+QFrame#DropZone:hover {
+    border-color: #0D9488;
+    background-color: #F0FDFA;
+}
+
+/* ===================================================================
+   10. СКРОЛБАРИ ТА ПРОГРЕС-БАР
+   =================================================================== */
+QScrollBar:vertical {
+    border: none;
+    background-color: #F1F5F9;
+    width: 8px;
+    border-radius: 4px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #CBD5E1;
+    border-radius: 4px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #94A3B8;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    height: 0px;
+    background: none;
+}
+
+QProgressBar {
+    background-color: #E2E8F0;
+    border: none;
+    border-radius: 4px;
+    height: 8px;
+    text-align: center;
+    color: transparent;
+}
+
+QProgressBar::chunk {
+    background-color: #0D9488;
+    border-radius: 4px;
+}
+
+/* ===================================================================
+   11. SKELETON ТА TOAST
+   =================================================================== */
+QWidget#Skeleton {
+    background-color: #E2E8F0;
+    border-radius: 6px;
+}
+
+QFrame#Toast {
+    background-color: #0F172A;
+    border-radius: 8px;
+}
+
+QLabel#ToastText {
+    color: #FFFFFF;
+    font-weight: 500;
+}
+
+/* ===================================================================
+   12. АУДІОПЛЕЄР ТА СТЕНОГРАМА  (зона: Кобильник)
+   =================================================================== */
+QFrame#AudioPlayer {
+    background-color: #134E4A;
+    border-radius: 12px;
+}
+
+QFrame#AudioPlayer QLabel {
+    color: #FFFFFF;
+    background: transparent;
+}
+
+QListWidget#Transcript {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    outline: none;
+}
+
+QListWidget#Transcript::item {
+    padding: 8px;
+}
+
+QListWidget#Transcript::item:selected {
+    background-color: #DBEAFE;
+    color: #0F172A;
+}
+
+/* ===================================================================
+   13. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
+   =================================================================== */
+
+
+/* ===================================================================
+   14. ЗОНА: МЕДКАРТКА ТА ДИНАМІКА                    (Лаврик)
+   =================================================================== */
+
+
+/* ===================================================================
+   15. ЗОНА: НОВИЙ ПАЦІЄНТ, НАЛАШТУВАННЯ, АРХІВ       (Вероніка)
+   =================================================================== */
+
+
+/* ===================================================================
+   16. ЗОНА: ПАЦІЄНТИ, ПРОФІЛЬ, ДОДАТИ СЕСІЮ          (Лідер)
+   =================================================================== */
