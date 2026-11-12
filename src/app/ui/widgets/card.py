@@ -36,9 +36,9 @@ class ListItemCard(QFrame):
         texts.addWidget(self.subtitle_label)
         row.addLayout(texts, stretch=1)
 
-        self.badge = Badge(badge_text, badge_variant)
-        self.badge.setVisible(bool(badge_text))
+        self.badge = Badge(badge_text, badge_variant, parent=self)
         row.addWidget(self.badge, alignment=Qt.AlignmentFlag.AlignVCenter)
+        self.badge.setVisible(bool(badge_text))
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 (Qt API)
         if event.button() == Qt.MouseButton.LeftButton:
