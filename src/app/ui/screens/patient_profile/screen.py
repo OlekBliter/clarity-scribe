@@ -29,6 +29,8 @@ class PatientProfileScreen(BaseScreen):
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._patient_id: str | None = None
+        self._has_dynamics: bool | None = None
+        self._request_id = 0
 
         root = QVBoxLayout(self)
         root.setContentsMargins(*(metrics.CONTENT_MARGIN,) * 4)
@@ -49,7 +51,7 @@ class PatientProfileScreen(BaseScreen):
         self._dynamics = outline_button(strings.PROFILE_DYNAMICS)
         self._add.clicked.connect(lambda: self.router.go(Route.ADD_SESSION, patient_id=self._patient_id))
         self._card.clicked.connect(lambda: self.router.go(Route.MEDICAL_CARD, patient_id=self._patient_id))
-        self._dynamics.clicked.connect(lambda: self.router.go(Route.DYNAMICS, patient_id=self._patient_id))
+        self._dynamics.clicked.connect(self._open_dynamics)
         for btn in (self._add, self._card, self._dynamics):
             actions.addWidget(btn)
         actions.addStretch(1)
@@ -65,14 +67,22 @@ class PatientProfileScreen(BaseScreen):
 
     def on_open(self, **params: Any) -> None:
         self._patient_id = params["patient_id"]
-        self.call(self.facade.get_patient_profile, self._patient_id, on_success=self._render)
+        self._has_dynamics = None
+        self._request_id += 1
+        request_id = self._request_id
+        self.call(self.facade.get_patient_profile, self._patient_id,
+                  on_success=lambda profile: self._render_current(profile, request_id))
+
+    def _render_current(self, profile: dict, request_id: int) -> None:
+        if request_id == self._request_id:
+            self._render(profile)
 
     def _render(self, profile: dict) -> None:
         self._crumb.set_path([strings.NAV_PATIENTS, profile["name"]])
         self._title.setText(profile["name"])
         self._contacts.setText(profile["contacts_line"])
         self._card.setEnabled(profile["has_card"])
-        self._dynamics.setEnabled(profile["has_dynamics"])
+        self._has_dynamics = profile["has_dynamics"]
         clear_layout(self._sessions)
         for s in profile["sessions"]:
             text, variant = badge_for(s["badge"])
@@ -80,6 +90,12 @@ class PatientProfileScreen(BaseScreen):
                                s["subtitle"], text, variant)
             row.clicked.connect(lambda s=s: self._open_session(s))
             self._sessions.addWidget(row)
+
+    def _open_dynamics(self) -> None:
+        if self._has_dynamics is False:
+            self.window().toast.show_message(strings.DYNAMICS_NEEDS_SESSIONS)
+        elif self._patient_id is not None:
+            self.router.go(Route.DYNAMICS, patient_id=self._patient_id)
 
     def _open_session(self, s: dict) -> None:
         if s["is_ready"]:
