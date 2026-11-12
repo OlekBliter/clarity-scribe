@@ -7,7 +7,7 @@ from .registry import mmss, age, fmt_date
 
 
 def build_sources(segment_ids: list[int], segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Maps raw segment IDs to quote dictionaries for the UI[cite: 7]."""
+    """Maps raw segment IDs to quote dictionaries for the UI."""
     seg_map = {s["segment_id"]: s for s in segments}
     result = []
     for sid in segment_ids:
@@ -25,7 +25,7 @@ def build_soap_view(
     soap: dict[str, Any], session: dict[str, Any], patient: dict[str, Any],
     first_session: dict[str, Any] | None, segments: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Builds the dictionary for the SOAP note screen[cite: 7]."""
+    """Builds the dictionary for the SOAP note screen."""
     soap_data = soap["final"]
     biomarkers = session.get("biomarkers") or {}
     first_biomarkers = (first_session.get("biomarkers") or {}) if first_session else {}
@@ -74,7 +74,7 @@ def build_soap_view(
 def build_card_view(
     card: dict[str, Any], patient: dict[str, Any], segments: list[dict[str, Any]], session_date: str
 ) -> dict[str, Any]:
-    """Builds the dictionary for the Medical Card screen[cite: 7]."""
+    """Builds the dictionary for the Medical Card screen."""
     draft_fields = {f["field_id"]: f for f in card["draft"]["fields"]}
     data_fields = {f["field_id"]: f for f in card["data"]["fields"]}
 
@@ -82,7 +82,7 @@ def build_card_view(
     for field_id, d_field in data_fields.items():
         dr_field = draft_fields.get(field_id, {})
         
-        # Визначення стану (normal, from_conversation, attention, contradictory)[cite: 2]
+        # Determine the state (normal, from_conversation, attention, contradictory)
         if dr_field.get("attention"):
             state = "attention"
         elif d_field.get("status") == "contradictory" or dr_field.get("status") == "contradictory":
