@@ -422,6 +422,51 @@ QListWidget#Transcript::item:selected {
     color: #0F172A;
 }
 
+/* Доповнення розділу 12: Кобильник. */
+WaveformWidget {
+    qproperty-waveColor: #CBD5E1;
+    qproperty-progressColor: #0D9488;
+    qproperty-backgroundColor: transparent;
+}
+QFrame#AudioPlayer:disabled { background-color: #475569; }
+QFrame#AudioPlayer QLabel:disabled { color: #CBD5E1; }
+QFrame#AudioPlayer QPushButton,
+QFrame#AudioPlayer QComboBox {
+    background-color: #FFFFFF;
+    color: #134E4A;
+    border: 1px solid #99F6E4;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+QFrame#AudioPlayer QPushButton:hover { background-color: #F0FDFA; }
+QFrame#AudioPlayer QPushButton:checked { background-color: #CCFBF1; }
+QFrame#AudioPlayer QPushButton:disabled,
+QFrame#AudioPlayer QComboBox:disabled {
+    background-color: #E2E8F0;
+    color: #64748B;
+    border-color: #CBD5E1;
+}
+QSlider#AudioVolume::groove:horizontal {
+    background: #CBD5E1;
+    height: 4px;
+    border-radius: 2px;
+}
+QSlider#AudioVolume::sub-page:horizontal { background: #0D9488; }
+QSlider#AudioVolume::handle:horizontal {
+    background: #FFFFFF;
+    border: 1px solid #0D9488;
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+}
+QSlider#AudioVolume::sub-page:horizontal:disabled { background: #94A3B8; }
+QSlider#AudioVolume::handle:horizontal:disabled { background: #CBD5E1; }
+
+
+QPushButton#AudioPlay { min-width: 92px; }
+QPushButton#AudioMute { min-width: 120px; }
+QComboBox#AudioSpeed { min-width: 56px; padding-right: 26px; }
+
 /* ===================================================================
    13. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
    =================================================================== */

@@ -35,6 +35,20 @@ PROFILE_SESSIONS = "Сесії"
 SESSION_ROW_TITLE = "Сесія {number} • {date}"
 
 # --- Кобильник: Екран сесії ---
+SOURCE_TIME = "[{time}]"
+TRANSCRIPT_SEARCH = "Пошук за текстом..."
+TRANSCRIPT_SPEAKERS = {"DOCTOR": "Лікар", "PATIENT": "Пацієнт"}
+TRANSCRIPT_ROW = "{time} {speaker}: «{text}»"
+AUDIO_PLAY = "Відтворити"
+AUDIO_PAUSE = "Пауза"
+AUDIO_MUTE = "Вимкнути звук"
+AUDIO_UNMUTE = "Увімкнути звук"
+AUDIO_SPEED = "Швидкість відтворення"
+AUDIO_VOLUME = "Гучність"
+AUDIO_RATES = ((1.0, "1.0x"), (1.25, "1.25x"), (1.5, "1.5x"), (2.0, "2.0x"))
+AUDIO_TIMESTAMP = "{minutes:02d}:{seconds:02d}"
+AUDIO_TIME = "{current} / {total}"
+
 
 # --- Лаврик: Медкартка, Динаміка ---
 DYNAMICS_TITLE = "Трекінг динаміки"
