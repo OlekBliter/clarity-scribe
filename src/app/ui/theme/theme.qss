@@ -504,3 +504,19 @@ QLabel#DynamicsPointBubble {
 /* ===================================================================
    16. ЗОНА: ПАЦІЄНТИ, ПРОФІЛЬ, ДОДАТИ СЕСІЮ          (Лідер)
    =================================================================== */
+QFrame#DropZone[dragActive="true"] {
+    border-color: #0D9488;
+    background-color: #F0FDFA;
+}
+
+QLabel#FileChip {
+    background-color: #F1F5F9;
+    color: #0F172A;
+    border-radius: 10px;
+    padding: 4px 12px;
+}
+
+QLabel#ErrorText {
+    color: #B91C1C;
+    font-size: 12px;
+}

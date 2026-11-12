@@ -33,6 +33,29 @@ PROFILE_CARD = "Медкартка"
 PROFILE_DYNAMICS = "Трекінг динаміки"
 PROFILE_SESSIONS = "Сесії"
 SESSION_ROW_TITLE = "Сесія {number} • {date}"
+STAGES_TITLE = "Обробка запису"
+STAGES_FOOTER = "Готову нотатку знайдете в профілі пацієнта"
+STAGE_TITLES = {
+    "transcription": "Транскрибація",
+    "anonymization": "Анонімізація тексту",
+    "biomarkers": "Біомаркери голосу",
+    "medical_card": "Медкартка (лише 1-ша сесія)",
+    "soap": "SOAP-нотатка",
+}
+STAGE_STATE_DONE = "Готово"
+STAGE_STATE_RUNNING = "Триває"
+STAGE_STATE_PENDING = "Очікує"
+STAGE_STATE_NOT_NEEDED = "Не потрібно"
+STAGE_STATE_ERROR = "Помилка"
+
+DROPZONE_TITLE = "Перетягніть двоканальний файл"
+DROPZONE_HINT = ".wav · канал 0 — лікар, канал 1 — пацієнт"
+DROPZONE_BUTTON = "Додати файл"
+DROPZONE_CLEAR = "Скасувати"
+DROPZONE_DIALOG_TITLE = "Оберіть аудіофайл"
+DROPZONE_FILTER = "Аудіо"
+DROPZONE_BAD_TYPE = "Підтримуються лише файли: {types}"
+DROPZONE_FILE_FMT = "{name} ({size_mb:.1f} MB)"
 
 # --- Кобильник: Екран сесії ---
 SOURCE_TIME = "[{time}]"
