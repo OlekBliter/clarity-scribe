@@ -35,6 +35,7 @@ from src.app.ui.widgets.buttons import primary_button, secondary_button
 from src.app.ui.widgets.drop_zone import DropZone
 from src.app.ui.widgets.stage_list import StageList
 from src.app.workers.pipeline_worker import PipelineWorker
+from src.app.ui.qt_helpers import fit_combo_popup
 
 log = logging.getLogger(__name__)
 _ISO_DATE = "yyyy-MM-dd"
@@ -97,6 +98,7 @@ class AddSessionScreen(BaseScreen):
 
         self._lang = QComboBox()
         self._lang.addItem(strings.ADD_LANG_UK, "uk")
+        fit_combo_popup(self._lang)
         self._number = QLineEdit()
         self._number.setReadOnly(True)
         self._date = QDateEdit(QDate.currentDate())
