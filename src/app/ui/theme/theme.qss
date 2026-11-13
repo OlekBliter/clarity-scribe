@@ -412,7 +412,81 @@ QLabel#ToastText {
 }
 
 /* ===================================================================
-   12. АУДІОПЛЕЄР ТА СТЕНОГРАМА  (зона: Кобильник)
+   12. КАЛЕНДАР (DataField)
+   =================================================================== */
+QDateEdit#DateField {
+    qproperty-weekendColor: #94A3B8;
+}
+
+QCalendarWidget#DateCalendar {
+    background-color: #FFFFFF;
+    border: 1px solid #0D9488;
+}
+
+QCalendarWidget QWidget {
+    background-color: #FFFFFF;
+    color: #0F172A;
+}
+
+QCalendarWidget #qt_calendar_navigationbar {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E2E8F0;
+    padding: 4px;
+}
+
+QCalendarWidget QToolButton {
+    background-color: transparent;
+    color: #0F172A;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #F0FDFA;
+    color: #0F766E;
+}
+
+QCalendarWidget QToolButton::menu-indicator {
+    image: none;
+}
+
+QCalendarWidget QSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    selection-background-color: #0D9488;
+    selection-color: #FFFFFF;
+    outline: 0;
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: #CBD5E1;
+}
+
+QMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 16px;
+}
+
+QMenu::item:selected {
+    background-color: #F0FDFA;
+    color: #0F766E;
+}
+/* ===================================================================
+   13. АУДІОПЛЕЄР ТА СТЕНОГРАМА  (зона: Кобильник)
    =================================================================== */
 QFrame#AudioPlayer {
     background-color: #134E4A;
@@ -486,12 +560,12 @@ QPushButton#AudioMute { min-width: 120px; }
 QComboBox#AudioSpeed { min-width: 56px; padding-right: 26px; }
 
 /* ===================================================================
-   13. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
+   14. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
    =================================================================== */
 
 
 /* ===================================================================
-   14. ЗОНА: МЕДКАРТКА ТА ДИНАМІКА                    (Лаврик)
+   15. ЗОНА: МЕДКАРТКА ТА ДИНАМІКА                    (Лаврик)
    =================================================================== */
 
 SparklineChart {
@@ -515,12 +589,12 @@ QLabel#DynamicsPointBubble {
 
 
 /* ===================================================================
-   15. ЗОНА: НОВИЙ ПАЦІЄНТ, НАЛАШТУВАННЯ, АРХІВ       (Вероніка)
+   16. ЗОНА: НОВИЙ ПАЦІЄНТ, НАЛАШТУВАННЯ, АРХІВ       (Вероніка)
    =================================================================== */
 
 
 /* ===================================================================
-   16. ЗОНА: ПАЦІЄНТИ, ПРОФІЛЬ, ДОДАТИ СЕСІЮ          (Лідер)
+   17. ЗОНА: ПАЦІЄНТИ, ПРОФІЛЬ, ДОДАТИ СЕСІЮ          (Лідер)
    =================================================================== */
 QFrame#DropZone[dragActive="true"] {
     border-color: #0D9488;

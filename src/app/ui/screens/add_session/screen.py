@@ -23,7 +23,7 @@ import logging
 from typing import Any
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtWidgets import (QComboBox, QDateEdit, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit,
                                QVBoxLayout, QWidget)
 
 from src.app.ui import metrics, strings
@@ -34,6 +34,7 @@ from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import primary_button, secondary_button
 from src.app.ui.widgets.drop_zone import DropZone
 from src.app.ui.widgets.stage_list import StageList
+from src.app.ui.widgets.date_field import DateField
 from src.app.workers.pipeline_worker import PipelineWorker
 from src.app.ui.qt_helpers import fit_combo_popup
 
@@ -101,9 +102,7 @@ class AddSessionScreen(BaseScreen):
         fit_combo_popup(self._lang)
         self._number = QLineEdit()
         self._number.setReadOnly(True)
-        self._date = QDateEdit(QDate.currentDate())
-        self._date.setCalendarPopup(True)
-        self._date.setDisplayFormat("dd.MM.yyyy")
+        self._date = DateField()
         fields = QHBoxLayout()
         fields.setSpacing(metrics.SPACING)
         for caption, widget in ((strings.ADD_LANGUAGE, self._lang),
