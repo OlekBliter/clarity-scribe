@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
 
 from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import clear_layout
@@ -62,8 +63,14 @@ class PatientProfileScreen(BaseScreen):
         root.addWidget(heading)
         self._sessions = QVBoxLayout()
         self._sessions.setSpacing(metrics.SPACING)
-        root.addLayout(self._sessions)
-        root.addStretch(1)
+        self._sessions.setAlignment(Qt.AlignmentFlag.AlignTop)
+        holder = QWidget()
+        holder.setLayout(self._sessions)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(holder)
+        root.addWidget(scroll, stretch=1)
 
     def on_open(self, **params: Any) -> None:
         self._patient_id = params["patient_id"]
@@ -83,6 +90,7 @@ class PatientProfileScreen(BaseScreen):
         self._contacts.setText(profile["contacts_line"])
         self._card.setEnabled(profile["has_card"])
         self._has_dynamics = profile["has_dynamics"]
+        self._contacts.setVisible(bool(profile["contacts_line"]))
         clear_layout(self._sessions)
         for s in profile["sessions"]:
             text, variant = badge_for(s["badge"])
