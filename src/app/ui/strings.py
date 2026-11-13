@@ -57,6 +57,19 @@ DROPZONE_FILTER = "Аудіо"
 DROPZONE_BAD_TYPE = "Підтримуються лише файли: {types}"
 DROPZONE_FILE_FMT = "{name} ({size_mb:.1f} MB)"
 
+#Для add_session
+ADD_TITLE = "Додати запис сесії"
+ADD_CRUMB = "Нова сесія"
+ADD_LANGUAGE = "Мова запису"
+ADD_LANG_UK = "Українська"
+ADD_NUMBER = "Номер сесії"
+ADD_DATE = "Дата сесії"
+ADD_START = "Запустити обробку"
+ADD_AGAIN = "Додати запис знову"
+ADD_TO_PROFILE = "До профілю пацієнта"
+ADD_DONE_TOAST = "Обробку завершено"
+ADD_RESUMED_HINT = "Обробка цієї сесії не розпочалась. Додайте запис знову: обробка почнеться з нуля з тим самим номером."
+
 # --- Кобильник: Екран сесії ---
 SOURCE_TIME = "[{time}]"
 TRANSCRIPT_SEARCH = "Пошук за текстом..."

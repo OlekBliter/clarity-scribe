@@ -20,6 +20,7 @@ TOAST_MS = 4000
 TOAST_BOTTOM_OFFSET = 40
 
 # --- Лідер ---
+STAGES_PANEL_WIDTH = 320
 
 # --- Кобильник ---
 WAVE_MIN_HEIGHT = 64
