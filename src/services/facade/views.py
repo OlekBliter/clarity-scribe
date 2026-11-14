@@ -5,6 +5,28 @@ from typing import Any
 
 from .registry import mmss, age, fmt_date
 
+_DOCTOR_FIELDS = (
+    "scales.phq9",
+    "scales.gad7",
+    "scales.other",
+    "hypotheses.notes",
+    "hypotheses.risk",
+    "agreements.format",
+    "agreements.frequency",
+    "agreements.cost",
+    "agreements.initial_goals",
+)
+
+
+def _biomarker_value(biomarkers: dict[str, Any], metric: str) -> Any:
+    if metric in biomarkers:
+        return biomarkers[metric]
+    for section in ("raw_dsp_features", "inferred_indices"):
+        values = biomarkers.get(section, {})
+        if metric in values:
+            return values[metric]
+    return None
+
 
 def build_sources(segment_ids: list[int], segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Maps raw segment IDs to quote dictionaries for the UI."""
@@ -32,8 +54,12 @@ def build_soap_view(
 
     chips = []
     for metric in soap_data.get("objective", {}).get("biomarker_refs", []):
-        val = biomarkers.get(metric)
-        baseline = first_biomarkers.get(metric) if session["session_number"] > 1 else None
+        val = _biomarker_value(biomarkers, metric)
+        baseline = (
+            _biomarker_value(first_biomarkers, metric)
+            if session["session_number"] > 1
+            else None
+        )
         arrow = None
         if val is not None and baseline is not None and not math.isclose(val, baseline):
             arrow = "up" if val > baseline else "down"
@@ -57,7 +83,7 @@ def build_soap_view(
         "date": fmt_date(dt),
         "status": soap["status"],
         "badge": "approved" if approved else "review",
-        "editable": not approved,
+        "editable": soap["status"] == "draft",
         "subjective": {
             "text": soap_data.get("subjective", {}).get("text", ""),
             "sources": build_sources(soap_data.get("subjective", {}).get("source_segments", []), segments)
@@ -77,6 +103,16 @@ def build_card_view(
     """Builds the dictionary for the Medical Card screen."""
     draft_fields = {f["field_id"]: f for f in card["draft"]["fields"]}
     data_fields = {f["field_id"]: f for f in card["data"]["fields"]}
+    for field_id in _DOCTOR_FIELDS:
+        data_fields.setdefault(
+            field_id,
+            {
+                "field_id": field_id,
+                "status": "doctor_input",
+                "value": None,
+                "edited_by_doctor": False,
+            },
+        )
 
     fields = []
     for field_id, d_field in data_fields.items():
