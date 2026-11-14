@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.app.ui import strings
+from src.app.ui import metrics, strings
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import Badge
 from src.app.ui.widgets.buttons import outline_button, secondary_button
@@ -37,11 +37,11 @@ class ArchiveRow(QFrame):
         self.name = name
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
+        layout.setContentsMargins(*(metrics.CARD_PADDING,) * 4)
+        layout.setSpacing(metrics.CARD_PADDING)
 
         info_layout = QVBoxLayout()
-        info_layout.setSpacing(4)
+        info_layout.setSpacing(metrics.SPACING_SMALL)
 
         self.name_label = QLabel(name)
         self.name_label.setObjectName("CardTitle")
@@ -80,15 +80,15 @@ class ArchiveScreen(BaseScreen):
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(*(metrics.CONTENT_MARGIN,) * 4)
+        main_layout.setSpacing(metrics.CARD_PADDING)
 
         title_label = QLabel(strings.ARCHIVE_TITLE)
         title_label.setObjectName("ScreenTitle")
         main_layout.addWidget(title_label)
 
         controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(12)
+        controls_layout.setSpacing(metrics.SPACING)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(strings.ARCHIVE_SEARCH_PLACEHOLDER)
@@ -113,7 +113,7 @@ class ArchiveScreen(BaseScreen):
         self.container = QWidget()
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
-        self.container_layout.setSpacing(12)
+        self.container_layout.setSpacing(metrics.SPACING)
         self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area.setWidget(self.container)
