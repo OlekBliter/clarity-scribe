@@ -30,6 +30,7 @@ class PatientProfileScreen(BaseScreen):
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._patient_id: str | None = None
+        self._has_card: bool | None = None
         self._has_dynamics: bool | None = None
         self._request_id = 0
 
@@ -51,7 +52,7 @@ class PatientProfileScreen(BaseScreen):
         self._card = outline_button(strings.PROFILE_CARD)
         self._dynamics = outline_button(strings.PROFILE_DYNAMICS)
         self._add.clicked.connect(lambda: self.router.go(Route.ADD_SESSION, patient_id=self._patient_id))
-        self._card.clicked.connect(lambda: self.router.go(Route.MEDICAL_CARD, patient_id=self._patient_id))
+        self._card.clicked.connect(self._open_card)
         self._dynamics.clicked.connect(self._open_dynamics)
         for btn in (self._add, self._card, self._dynamics):
             actions.addWidget(btn)
@@ -74,6 +75,7 @@ class PatientProfileScreen(BaseScreen):
 
     def on_open(self, **params: Any) -> None:
         self._patient_id = params["patient_id"]
+        self._has_card = None
         self._has_dynamics = None
         self._request_id += 1
         request_id = self._request_id
@@ -88,7 +90,7 @@ class PatientProfileScreen(BaseScreen):
         self._crumb.set_path([strings.NAV_PATIENTS, profile["name"]])
         self._title.setText(profile["name"])
         self._contacts.setText(profile["contacts_line"])
-        self._card.setEnabled(profile["has_card"])
+        self._has_card = profile["has_card"]
         self._has_dynamics = profile["has_dynamics"]
         self._contacts.setVisible(bool(profile["contacts_line"]))
         clear_layout(self._sessions)
@@ -104,6 +106,12 @@ class PatientProfileScreen(BaseScreen):
             self.window().toast.show_message(strings.DYNAMICS_NEEDS_SESSIONS)
         elif self._patient_id is not None:
             self.router.go(Route.DYNAMICS, patient_id=self._patient_id)
+
+    def _open_card(self) -> None:
+        if self._has_card is False:
+            self.window().toast.show_message(strings.MEDCARD_EMPTY)
+        elif self._patient_id is not None:
+            self.router.go(Route.MEDICAL_CARD, patient_id=self._patient_id)
 
     def _open_session(self, s: dict) -> None:
         if s["is_ready"]:

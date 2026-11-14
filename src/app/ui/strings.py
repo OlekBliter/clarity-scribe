@@ -87,6 +87,89 @@ AUDIO_TIME = "{current} / {total}"
 
 
 # --- Лаврик: Медкартка, Динаміка ---
+MEDCARD_REMOVE_SOURCE = "Прибрати джерело з цього поля"
+MEDCARD_OPEN_BLOCK = "Відкрити"
+MEDCARD_PANEL_CLOSE = "×"
+MEDCARD_PANEL_CLOSE_LABEL = "Закрити панель"
+MEDCARD_LOCAL_EDITS = "Правки ще не збережені. При виході з медкартки їх буде скинуто."
+MEDCARD_QUOTE = "Цитата з розмови"
+MEDCARD_TITLE = 'Медкартка першого прийому • {date}'
+MEDCARD_BREADCRUMB = 'Медкартка'
+MEDCARD_EXPORT = 'Експорт медкартки'
+MEDCARD_SOON = 'Скоро'
+MEDCARD_SAVE = 'Зберегти правки'
+MEDCARD_APPROVE = 'Підтвердити'
+MEDCARD_ACTIONS_HINT = 'Збереження та підтвердження будуть доступні в A4.'
+MEDCARD_LOADING = 'Завантаження медкартки…'
+MEDCARD_EMPTY = 'Медкартки ще немає.'
+MEDCARD_ERROR = 'Не вдалося завантажити медкартку.'
+MEDCARD_LOCAL = 'Лише локально'
+MEDCARD_DOCTOR = 'Заповнює лікар'
+MEDCARD_EDITED = 'Відредаговано лікарем'
+MEDCARD_YES = 'Так'
+MEDCARD_NO = 'Ні'
+MEDCARD_NONE = '—'
+MEDCARD_ATTENTION = 'Потребує уваги'
+MEDCARD_ATTENTION_SOURCE = 'Потребує уваги • джерело {time}'
+MEDCARD_CONTRADICTORY = 'Суперечливо'
+MEDCARD_CONVERSATION = 'Із розмови'
+MEDCARD_SOURCE_TITLE = 'Джерело {time}'
+MEDCARD_EXTRA = 'Інші дані'
+MEDCARD_BIRTH_AGE = '{birth} ({age} {unit})'
+MEDCARD_AGE_UNITS = ('рік', 'роки', 'років')
+MEDCARD_COLUMNS = {'left': 'Анамнез та дані з розмови', 'right': 'Клінічна оцінка та домовленості'}
+MEDCARD_BLOCKS = {'contacts': 'Контакти й екстрений контакт',
+ 'safety': 'Безпека',
+ 'request': 'Запит',
+ 'history': 'Попередній досвід і лікування',
+ 'substance': 'Вживання ПАР',
+ 'context': 'Контекст життя',
+ 'scales': 'Шкали',
+ 'hypotheses': 'Гіпотези й оцінка ризику',
+ 'resources': 'Ресурси й цілі',
+ 'agreements': 'Домовленості'}
+MEDCARD_FIELDS = {'safety.suicidal_past': 'Суїцидальні думки / самоушкодження в минулому',
+ 'safety.suicidal_now': 'Суїцидальні думки / самоушкодження зараз',
+ 'safety.details': 'Подробиці щодо безпеки',
+ 'request.complaint': 'Скарга',
+ 'request.onset': 'Коли почалося',
+ 'request.why_now': 'Чому звернулися зараз',
+ 'history.similar_before': 'Подібні стани раніше',
+ 'history.prior_therapy': 'Попередня терапія',
+ 'history.helpful_or_not': 'Що допомагало або не допомагало',
+ 'history.on_medication': 'Приймання ліків',
+ 'history.medications_list': 'Препарати',
+ 'substance.alcohol': 'Алкоголь',
+ 'substance.cannabis': 'Канабіс',
+ 'substance.other': 'Інші речовини',
+ 'context.work_study': 'Робота та навчання',
+ 'context.relationships_family': 'Стосунки й сім’я',
+ 'context.life_changes_year': 'Зміни за останній рік',
+ 'context.social_support': 'Соціальна підтримка',
+ 'scales.phq9': 'PHQ-9',
+ 'scales.gad7': 'GAD-7',
+ 'scales.other': 'Інші шкали',
+ 'hypotheses.notes': 'Клінічні спостереження',
+ 'hypotheses.risk': 'Оцінка ризику',
+ 'resources.coping': 'Що допомагає справлятися',
+ 'resources.strengths': 'Сильні сторони',
+ 'goals.change': 'Бажані зміни',
+ 'goals.success_criteria': 'Критерії успіху',
+ 'agreements.format': 'Формат',
+ 'agreements.frequency': 'Частота',
+ 'agreements.cost': 'Вартість',
+ 'agreements.initial_goals': 'Цілі на початковий період'}
+MEDCARD_CONTACTS = {'preferred_name': 'Ім’я',
+ 'birth_date': 'Дата народження',
+ 'phone': 'Телефон',
+ 'email': 'Email',
+ 'preferred_channel': 'Зручний канал',
+ 'emergency_name': 'Екстрений контакт',
+ 'emergency_relation': 'Стосунок',
+ 'emergency_phone': 'Телефон екстреного контакту',
+ 'emergency_consent': 'Згода на звернення'}
+MEDCARD_RISKS = {'low': 'Низький', 'moderate': 'Помірний', 'high': 'Високий'}
+MEDCARD_STATUSES = {'draft': 'Чернетка', 'approved': 'Затверджено'}
 DYNAMICS_TITLE = "Трекінг динаміки"
 DYNAMICS_PATIENT_TITLE = "Трекінг динаміки • {name}"
 DYNAMICS_BREADCRUMB = "Динаміка"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QPushButton, QSizePolicy, QWidget
 
-from app.ui import strings as S
+from src.app.ui import strings as S
 
 
 class SourceChip(QPushButton):

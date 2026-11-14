@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import clear_layout
+from src.app.ui.widgets.action_icon import ActionIcon
 from src.app.ui.router import Route, Router
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import Badge
@@ -95,7 +96,7 @@ class DynamicsScreen(BaseScreen):
         layout.setSpacing(metrics.SPACING)
 
         top = QHBoxLayout()
-        back = outline_button(strings.BACK)
+        back = ActionIcon("back", strings.BACK)
         back.clicked.connect(self.router.back)
         top.addWidget(back)
         self._crumb = Breadcrumb(content)

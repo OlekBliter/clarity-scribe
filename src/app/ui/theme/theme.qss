@@ -564,6 +564,15 @@ QComboBox#AudioSpeed { min-width: 56px; padding-right: 26px; }
    =================================================================== */
 
 
+QFrame#MedcardOverlay {
+    background-color: rgba(15, 23, 42, 110);
+}
+QFrame#MedcardPanel {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 14px;
+}
+
 /* ===================================================================
    15. ЗОНА: МЕДКАРТКА ТА ДИНАМІКА                    (Лаврик)
    =================================================================== */
@@ -612,3 +621,18 @@ QLabel#ErrorText {
     color: #B91C1C;
     font-size: 12px;
 }
+/* Medical card navigation and source actions. */
+QToolButton#CardIconAction {
+    color: #475569;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    padding: 0;
+}
+QToolButton#CardIconAction:hover, QToolButton#CardIconAction:focus {
+    color: #0F766E;
+    background: #F0FDFA;
+    border-color: #0D9488;
+}
+QToolButton#CardIconAction:pressed { background: #CCFBF1; }
+CardBlock { qproperty-accentColor: #0D9488; }
