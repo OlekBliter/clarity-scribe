@@ -1,64 +1,42 @@
 """Fake systems and dummy data for testing the Facade without loading ML libraries."""
+from copy import deepcopy
+import json
 import os
+from pathlib import Path
 import wave
 from typing import Any
 
-from src.schemas.contracts import MODEL_FIELDS
+
+def _load_fixture(filename: str) -> dict[str, Any]:
+    """Load a JSON response fixture from this directory."""
+    path = Path(__file__).with_name(filename)
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 class S1Fake:
     def __init__(self, fail_with: Exception | None = None):
         self.fail_with = fail_with
         self.calls = []
+        self._response = _load_fixture("s1_transcription.json")
 
     def transcribe(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
-        if self.fail_with:
+        if self.fail_with is not None:
             raise self.fail_with
-        return {
-            "language": "uk",
-            "metadata": {
-                "audio_duration_sec": 1965.0,
-                "doctor_speaking_time_sec": 450.0,
-                "patient_speaking_time_sec": 1400.0,
-                "silence_time_sec": 115.0
-            },
-            "segments": [
-                {"segment_id": 0, "speaker": "DOCTOR", "start_time": 2.0, "end_time": 5.0, "text": "Доброго дня.", "confidence": 0.9},
-                {"segment_id": 1, "speaker": "PATIENT", "start_time": 6.0, "end_time": 9.0, "text": "Дуже важко.", "confidence": 0.8}
-            ]
-        }
+        return deepcopy(self._response)
 
 
 class S2Fake:
     def __init__(self, fail_with: Exception | None = None):
         self.fail_with = fail_with
         self.calls = []
+        self._response = _load_fixture("s2_biomarkers.json")
 
     def extract_biomarkers(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
-        if self.fail_with:
+        if self.fail_with is not None:
             raise self.fail_with
-        return {
-            "raw_dsp_features": {
-                "f0_variability_sd": 14.8, "f0_mean_hz": 185.2, "jitter_percent": 1.45,
-                "shimmer_percent": 4.12, "hnr_db": 16.8, "speech_rate_syllables_per_sec": 3.4,
-                "pause_ratio": 0.28, "mean_latent_response_time_sec": 1.68
-            },
-            "inferred_indices": {
-                "affect_flatness_flag": False, "vocal_jitter_percentile": 62.0,
-                "psychomotor_retardation_index": 0.30,
-                "intrasession_dynamics": {
-                    "f0_variability_change_percent": 10.0,
-                    "speech_rate_change_percent": -5.0,
-                    "pause_ratio_change_percent": 2.0,
-                    "trend_summary": "activation"
-                }
-            },
-            "window_chunks": [
-                {"window_index": 0, "time_range": "00:00-03:00", "f0_variability_sd": 14.0, "speech_rate_syllables_per_sec": 3.5, "pause_ratio": 0.25}
-            ]
-        }
+        return deepcopy(self._response)
 
 
 class ClinicalFake:
@@ -66,29 +44,33 @@ class ClinicalFake:
         self.fail_with = fail_with
         self.calls_card = []
         self.calls_soap = []
+        self._card_response = _load_fixture("s3_medical_card.json")
+        self._soap_response = _load_fixture("s4_soap.json")
 
     def generate_medical_card(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls_card.append(payload)
-        if self.fail_with:
+        if self.fail_with is not None:
             raise self.fail_with
-        fields = []
-        for field_id in MODEL_FIELDS:
-            if field_id == "request.complaint":
-                fields.append({"field_id": field_id, "status": "filled", "value": "Дуже важко", "evidence": [1]})
-            else:
-                fields.append({"field_id": field_id, "status": "not_discussed"})
-        return {"fields": fields}
+        return deepcopy(self._card_response)
 
     def generate_soap_note(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls_soap.append(payload)
-        if self.fail_with:
+        if self.fail_with is not None:
             raise self.fail_with
-        return {
-            "subjective": {"text": "Пацієнт скаржиться.", "source_segments": [1]},
-            "objective": {"text": "Спостерігається втома.", "biomarker_refs": ["pause_ratio"]},
-            "assessment": {"text": "Депресивна динаміка.", "basis": "model_synthesis"},
-            "plan": [{"text": "Продовжити терапію.", "origin": "recommended"}]
-        }
+        return deepcopy(self._soap_response)
+
+
+class S5Fake:
+    def __init__(self, fail_with: Exception | None = None):
+        self.fail_with = fail_with
+        self.calls = []
+        self._response = _load_fixture("s5_dynamics.json")
+
+    def calculate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(payload)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return deepcopy(self._response)
 
 
 class S6Fake:
@@ -98,7 +80,7 @@ class S6Fake:
 
     def process(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(payload)
-        if self.fail_with:
+        if self.fail_with is not None:
             raise self.fail_with
         op = payload.get("operation")
         if op == "sanitize":
@@ -110,12 +92,12 @@ class S6Fake:
         return {"items": [{"key": it["key"], "text": it["text"]} for it in payload.get("items", [])]}
 
 
-# Generate test tiny_stereo.wav (1 second of silence, 2 channels, 44100Hz)
+# Generate a test tiny_stereo.wav (1 second of silence, 2 channels, 44100Hz)
 _DUMMY_WAV_PATH = os.path.join(os.path.dirname(__file__), "tiny_stereo.wav")
 if not os.path.exists(_DUMMY_WAV_PATH):
     os.makedirs(os.path.dirname(_DUMMY_WAV_PATH), exist_ok=True)
-    with wave.open(_DUMMY_WAV_PATH, 'wb') as f:
+    with wave.open(_DUMMY_WAV_PATH, "wb") as f:
         f.setnchannels(2)
         f.setsampwidth(2)
         f.setframerate(44100)
-        f.writeframes(b'\x00' * 44100)
+        f.writeframes(b"\x00" * (44100 * 2 * 2))
