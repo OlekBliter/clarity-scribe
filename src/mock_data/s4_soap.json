@@ -1,0 +1,21 @@
+{
+  "subjective": {
+    "text": "Пацієнтка скаржиться на постійну втому та відсутність сил.",
+    "source_segments": [1]
+  },
+  "objective": {
+    "text": "Спостерігається зниження темпу мовлення та збільшення пауз.",
+    "biomarker_refs": ["pause_ratio"]
+  },
+  "assessment": {
+    "text": "Помірна депресивна динаміка.",
+    "basis": "model_synthesis"
+  },
+  "plan": [
+    {
+      "text": "Продовжити спостереження.",
+      "origin": "recommended",
+      "confirmed": null
+    }
+  ]
+}

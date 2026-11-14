@@ -1,0 +1,32 @@
+{
+  "raw_dsp_features": {
+    "f0_variability_sd": 14.8,
+    "f0_mean_hz": 185.2,
+    "jitter_percent": 1.45,
+    "shimmer_percent": 4.12,
+    "hnr_db": 16.8,
+    "speech_rate_syllables_per_sec": 3.4,
+    "pause_ratio": 0.28,
+    "mean_latent_response_time_sec": 1.68
+  },
+  "inferred_indices": {
+    "affect_flatness_flag": false,
+    "vocal_jitter_percentile": 62.0,
+    "psychomotor_retardation_index": 0.30,
+    "intrasession_dynamics": {
+      "f0_variability_change_percent": 10.0,
+      "speech_rate_change_percent": -5.0,
+      "pause_ratio_change_percent": 2.0,
+      "trend_summary": "activation"
+    }
+  },
+  "window_chunks": [
+    {
+      "window_index": 0,
+      "time_range": "00:00-03:00",
+      "f0_variability_sd": 14.0,
+      "speech_rate_syllables_per_sec": 3.5,
+      "pause_ratio": 0.25
+    }
+  ]
+}
