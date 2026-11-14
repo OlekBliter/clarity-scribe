@@ -262,7 +262,7 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         with self._db.read() as conn:
             card = self._cards.find(conn, patient_id)
             if not card:
-                raise FacadeError("Медкартки ще немає.")
+                raise FacadeError("Медкартка ще не готова.")
             if card["status"] == "generated":
                 raise FacadeError("Медкартка ще не готова.")
                 
