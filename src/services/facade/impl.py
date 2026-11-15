@@ -14,11 +14,11 @@ does not load ML libraries. ``factory.create_facade`` builds the real instance.
 """
 from __future__ import annotations
 
-import os
 from functools import wraps
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
 from src.database.connection import Database
 from src.database.repos import (
@@ -47,6 +47,23 @@ _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
 
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+def _build_doctor_command(
+    target: Literal["card", "soap"],
+    entity_id: str,
+    action: Literal["edit", "approve"],
+    edits: list[dict[str, Any]],
+    review_started_at: datetime,
+) -> DoctorCommand:
+    return DoctorCommand(
+        target=target,
+        id=entity_id,
+        action=action,
+        edits=[Edit(path=edit["path"], new_value=edit["new_value"]) for edit in edits],
+        review_started_at=review_started_at,
+        at=datetime.now(review_started_at.tzinfo),
+    )
 
 
 def _guard(method: F) -> F:
@@ -187,27 +204,13 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     @_guard
     def save_soap(self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's SOAP edits without approving."""
-        cmd = DoctorCommand(
-            target="soap",
-            id=session_id,
-            action="edit",
-            edits=[Edit(path=e["path"], new_value=e["new_value"]) for e in edits],
-            review_started_at=review_started_at,
-            at=datetime.now(timezone.utc)
-        )
+        cmd = _build_doctor_command("soap", session_id, "edit", edits, review_started_at)
         self._o.apply_doctor_command(cmd)
 
     @_guard
     def approve_soap(self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's SOAP edits and approve the note."""
-        cmd = DoctorCommand(
-            target="soap",
-            id=session_id,
-            action="approve",
-            edits=[Edit(path=e["path"], new_value=e["new_value"]) for e in edits],
-            review_started_at=review_started_at,
-            at=datetime.now(timezone.utc)
-        )
+        cmd = _build_doctor_command("soap", session_id, "approve", edits, review_started_at)
         self._o.apply_doctor_command(cmd)
 
     @_guard
@@ -228,6 +231,15 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
             for s in segments
         ]
 
+    def _resolve_audio_path(self, audio_path: str | None) -> str | None:
+        if not audio_path:
+            return None
+        path = Path(audio_path)
+        if not path.is_absolute():
+            path = self._o.data_dir / path
+        path = path.resolve()
+        return str(path) if path.is_file() else None
+
     @_guard
     def get_audio_info(self, session_id: str) -> dict[str, Any]:
         """Audio file path and duration for the player (read-only)."""
@@ -235,8 +247,8 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         with self._db.read() as conn:
             session = self._sessions.get(conn, session_id)
         
-        path = session.get("audio_path")
-        if not path or not os.path.isfile(path):
+        path = self._resolve_audio_path(session.get("audio_path"))
+        if path is None:
             return {"path": None, "duration": 0.0}
             
         return {"path": path, "duration": duration_seconds(path)}
@@ -248,8 +260,8 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         with self._db.read() as conn:
             session = self._sessions.get(conn, session_id)
             
-        path = session.get("audio_path")
-        if not path or not os.path.isfile(path):
+        path = self._resolve_audio_path(session.get("audio_path"))
+        if path is None:
             return []
             
         return [float(p) for p in waveform_peaks(path, bins=900)]
@@ -275,27 +287,13 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     @_guard
     def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's card edits without approving."""
-        cmd = DoctorCommand(
-            target="card",
-            id=patient_id,
-            action="edit",
-            edits=[Edit(path=e["path"], new_value=e["new_value"]) for e in edits],
-            review_started_at=review_started_at,
-            at=datetime.now(timezone.utc)
-        )
+        cmd = _build_doctor_command("card", patient_id, "edit", edits, review_started_at)
         self._o.apply_doctor_command(cmd)
 
     @_guard
     def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's card edits and approve the card."""
-        cmd = DoctorCommand(
-            target="card",
-            id=patient_id,
-            action="approve",
-            edits=[Edit(path=e["path"], new_value=e["new_value"]) for e in edits],
-            review_started_at=review_started_at,
-            at=datetime.now(timezone.utc)
-        )
+        cmd = _build_doctor_command("card", patient_id, "approve", edits, review_started_at)
         self._o.apply_doctor_command(cmd)
 
     # ------------------------------------------------------------------ dynamics
