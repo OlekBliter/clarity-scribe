@@ -564,6 +564,50 @@ QComboBox#AudioSpeed { min-width: 56px; padding-right: 26px; }
    =================================================================== */
 
 
+QScrollArea#SoapScroll { border: none; background: transparent; }
+QWidget#SoapBody { background: #FFFFFF; }
+QTextEdit#SoapEditor { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }
+QTextEdit#SoapEditor:read-only { border-color: #E2E8F0; background: #F8FAFC; }
+QPushButton#SessionAction {
+    min-height: 24px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 2px solid #CBD5E1;
+    background-color: #F1F5F9;
+    color: #475569;
+    font-weight: 600;
+}
+QPushButton#SessionAction:hover { background-color: #E2E8F0; color: #0F172A; }
+QPushButton#SessionAction:pressed { background-color: #CBD5E1; }
+QPushButton#SessionAction[variant="primary"] {
+    background-color: #0D9488; border-color: #0D9488; color: #FFFFFF;
+}
+QPushButton#SessionAction[variant="primary"]:hover {
+    background-color: #0F766E; border-color: #0F766E;
+}
+QPushButton#SessionAction[variant="primary"]:pressed {
+    background-color: #115E59; border-color: #115E59;
+}
+QPushButton#SessionAction[variant="outline"] {
+    background-color: #FFFFFF; border-color: #0D9488; color: #0F766E;
+}
+QPushButton#SessionAction[variant="outline"]:hover { background-color: #F0FDFA; }
+QPushButton#SessionAction[variant="outline"]:pressed { background-color: #CCFBF1; }
+QPushButton#SessionAction[variant="danger"] {
+    background-color: #FFFFFF; border-color: #FCA5A5; color: #B91C1C;
+}
+QPushButton#SessionAction[variant="danger"]:hover {
+    background-color: #FEF2F2; border-color: #F87171;
+}
+QPushButton#SessionAction[variant="danger"]:pressed { background-color: #FEE2E2; }
+QPushButton#SessionAction:focus,
+QPushButton#SessionAction[variant]:focus { border-color: #0F172A; }
+QPushButton#SessionAction:disabled,
+QPushButton#SessionAction[variant]:disabled {
+    background-color: #F1F5F9; border-color: #E2E8F0; color: #94A3B8;
+}
+
+
 QFrame#MedcardOverlay {
     background-color: rgba(15, 23, 42, 110);
 }

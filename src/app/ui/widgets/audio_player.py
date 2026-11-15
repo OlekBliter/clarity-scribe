@@ -7,11 +7,11 @@ from pathlib import Path
 from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel,
+    QComboBox, QFrame, QGridLayout, QLabel,
     QPushButton, QSlider, QWidget,
 )
 
-from app.ui import metrics as M, strings as S
+from src.app.ui import metrics as M, strings as S
 
 
 class AudioPlayer(QFrame):
@@ -51,15 +51,15 @@ class AudioPlayer(QFrame):
         self.mute_button = QPushButton(S.AUDIO_MUTE, self)
         self.mute_button.setObjectName("AudioMute")
         self.mute_button.setCheckable(True)
-        layout = QHBoxLayout(self)
+        layout = QGridLayout(self)
         layout.setContentsMargins(*M.AUDIO_MARGINS)
         layout.setSpacing(M.SPACING)
-        layout.addWidget(self.play_button)
-        layout.addWidget(self.time_label)
-        layout.addStretch()
-        layout.addWidget(self.speed)
-        layout.addWidget(self.volume)
-        layout.addWidget(self.mute_button)
+        layout.addWidget(self.play_button, 0, 0)
+        layout.addWidget(self.time_label, 0, 1, 1, 2)
+        layout.addWidget(self.speed, 1, 0)
+        layout.addWidget(self.volume, 1, 1)
+        layout.addWidget(self.mute_button, 1, 2)
+        layout.setColumnStretch(1, 1)
         self.play_button.clicked.connect(self._toggle_play)
         self.speed.currentIndexChanged.connect(self._set_rate)
         self.volume.valueChanged.connect(self._set_volume)

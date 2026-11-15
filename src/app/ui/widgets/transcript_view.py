@@ -1,15 +1,15 @@
 """Searchable transcript with segment and timestamp navigation."""
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QLineEdit, QListWidget,
+    QAbstractItemView, QListView, QLineEdit, QListWidget,
     QListWidgetItem, QVBoxLayout, QWidget,
 )
 
-from app.ui import metrics as M, strings as S
+from src.app.ui import metrics as M, strings as S
 
 
 class Segment(TypedDict):
@@ -27,6 +27,7 @@ class Segment(TypedDict):
     speaker: Literal["DOCTOR", "PATIENT"]
     time: str
     start: float
+    end: NotRequired[float]
     text: str
 
 
@@ -50,6 +51,8 @@ class TranscriptView(QWidget):
         self.transcript = QListWidget(self)
         self.transcript.setObjectName("Transcript")
         self.transcript.setWordWrap(True)
+        self.transcript.setResizeMode(QListView.ResizeMode.Adjust)
+        self.transcript.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.transcript.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(*M.TRANSCRIPT_MARGINS)
@@ -110,6 +113,12 @@ class TranscriptView(QWidget):
         self._scroll.setStartValue(previous)
         self._scroll.setEndValue(target)
         self._scroll.start()
+
+    def clear_selection(self) -> None:
+        """Clear playback highlighting for silence between transcript segments."""
+        self._scroll.stop()
+        self.transcript.clearSelection()
+        self.transcript.setCurrentRow(-1)
 
     def _filter(self, query: str) -> None:
         """Filter displayed rows using Unicode-aware case-insensitive matching."""

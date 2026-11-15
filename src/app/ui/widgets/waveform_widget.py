@@ -7,7 +7,7 @@ from PySide6.QtCore import Property, QLineF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QWidget
 
-from app.ui import metrics as M
+from src.app.ui import metrics as M
 
 
 class WaveformWidget(QWidget):
