@@ -487,15 +487,21 @@ QMenu::item:selected {
 }
 /* ===================================================================
    13. АУДІОПЛЕЄР ТА СТЕНОГРАМА  (зона: Кобильник)
+   Плеєр живе всередині звичайної QFrame#Card (хвиля + рядок керування),
+   тож сам AudioPlayer прозорий і без рамки.
    =================================================================== */
 QFrame#AudioPlayer {
-    background-color: #134E4A;
-    border-radius: 12px;
+    background-color: transparent;
+    border: none;
 }
 
 QFrame#AudioPlayer QLabel {
-    color: #FFFFFF;
     background: transparent;
+}
+
+QFrame#AudioDivider {
+    background-color: #E2E8F0;
+    border: none;
 }
 
 QListWidget#Transcript {
@@ -514,36 +520,99 @@ QListWidget#Transcript::item:selected {
     color: #0F172A;
 }
 
-/* Доповнення розділу 12: Кобильник. */
 WaveformWidget {
     qproperty-waveColor: #CBD5E1;
     qproperty-progressColor: #0D9488;
     qproperty-backgroundColor: transparent;
 }
-QFrame#AudioPlayer:disabled { background-color: #475569; }
-QFrame#AudioPlayer QLabel:disabled { color: #CBD5E1; }
-QFrame#AudioPlayer QPushButton,
-QFrame#AudioPlayer QComboBox {
-    background-color: #FFFFFF;
-    color: #134E4A;
-    border: 1px solid #99F6E4;
-    border-radius: 6px;
-    padding: 6px 10px;
+
+/* Головний акцент: кругла Play/Pause (іконку малює віджет кольором `color`) */
+QPushButton#AudioPlay {
+    background-color: #0D9488;
+    color: #FFFFFF;
+    border: 2px solid transparent;
+    border-radius: 20px;
+    padding: 0;
 }
-QFrame#AudioPlayer QPushButton:hover { background-color: #F0FDFA; }
-QFrame#AudioPlayer QPushButton:checked { background-color: #CCFBF1; }
-QFrame#AudioPlayer QPushButton:disabled,
-QFrame#AudioPlayer QComboBox:disabled {
+QPushButton#AudioPlay:hover { background-color: #0F766E; }
+QPushButton#AudioPlay:pressed { background-color: #115E59; }
+QPushButton#AudioPlay:focus { border-color: #99F6E4; }
+QPushButton#AudioPlay:disabled,
+QPushButton#AudioPlay:disabled:hover {
     background-color: #E2E8F0;
-    color: #64748B;
-    border-color: #CBD5E1;
+    color: #94A3B8;
+    border-color: transparent;
 }
+
+/* Таймкод: приглушений, шрифт із фіксованою шириною цифр задається в коді */
+QLabel#AudioTime {
+    color: #64748B;
+    font-size: 12px;
+    font-weight: 500;
+}
+QLabel#AudioTime:disabled { color: #CBD5E1; }
+
+/* Швидкість: чип-«пілюля» */
+QComboBox#AudioSpeed {
+    background-color: #F1F5F9;
+    color: #475569;
+    border: 1px solid #CBD5E1;
+    border-radius: 14px;
+    padding: 0 0 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QComboBox#AudioSpeed:hover {
+    background-color: #F0FDFA;
+    color: #0F766E;
+    border-color: #0D9488;
+}
+QComboBox#AudioSpeed:focus {
+    border: 1px solid #0D9488;
+    padding: 0 0 0 12px;
+}
+QComboBox#AudioSpeed::drop-down { border: none; width: 22px; }
+QComboBox#AudioSpeed:disabled {
+    background-color: #F1F5F9;
+    color: #94A3B8;
+    border-color: #E2E8F0;
+}
+
+/* Вимкнення звуку: іконка-кнопка як CardIconAction у медкартці */
+QPushButton#AudioMute {
+    background-color: transparent;
+    color: #475569;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0;
+}
+QPushButton#AudioMute:hover,
+QPushButton#AudioMute:focus {
+    color: #0F766E;
+    background-color: #F0FDFA;
+    border-color: #0D9488;
+}
+QPushButton#AudioMute:pressed,
+QPushButton#AudioMute:checked {
+    color: #0F766E;
+    background-color: #CCFBF1;
+    border-color: #0D9488;
+}
+QPushButton#AudioMute:disabled {
+    color: #CBD5E1;
+    background-color: transparent;
+    border-color: transparent;
+}
+
 QSlider#AudioVolume::groove:horizontal {
     background: #CBD5E1;
     height: 4px;
     border-radius: 2px;
 }
-QSlider#AudioVolume::sub-page:horizontal { background: #0D9488; }
+QSlider#AudioVolume::sub-page:horizontal {
+    background: #0D9488;
+    border-radius: 2px;
+}
 QSlider#AudioVolume::handle:horizontal {
     background: #FFFFFF;
     border: 1px solid #0D9488;
@@ -551,62 +620,105 @@ QSlider#AudioVolume::handle:horizontal {
     margin: -5px 0;
     border-radius: 6px;
 }
+QSlider#AudioVolume::handle:horizontal:hover { background: #F0FDFA; }
 QSlider#AudioVolume::sub-page:horizontal:disabled { background: #94A3B8; }
-QSlider#AudioVolume::handle:horizontal:disabled { background: #CBD5E1; }
-
-
-QPushButton#AudioPlay { min-width: 92px; }
-QPushButton#AudioMute { min-width: 120px; }
-QComboBox#AudioSpeed { min-width: 56px; padding-right: 26px; }
+QSlider#AudioVolume::handle:horizontal:disabled {
+    background: #CBD5E1;
+    border-color: #CBD5E1;
+}
 
 /* ===================================================================
    14. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
+   Картки S/O/A/P — це QFrame#Card, як блоки медкартки.
    =================================================================== */
-
+/* SOAP: кнопка повернення як у медкартці (44 × 44, лише стрілка). */
+QToolButton#SessionBack {
+    qproperty-arrowColor: #475569;
+    color: #475569;
+    background-color: #F0FDFA;
+    border: 1px solid #0D9488;
+    border-radius: 11px;
+    padding: 0;
+}
+QToolButton#SessionBack:hover, QToolButton#SessionBack:focus {
+    qproperty-arrowColor: #475569;
+    background-color: #F0FDFA;
+    border-color: #0D9488;
+}
+QToolButton#SessionBack:pressed {
+    background-color: #CCFBF1;
+}
 
 QScrollArea#SoapScroll { border: none; background: transparent; }
-QWidget#SoapBody { background: #FFFFFF; }
-QTextEdit#SoapEditor { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }
-QTextEdit#SoapEditor:read-only { border-color: #E2E8F0; background: #F8FAFC; }
-QPushButton#SessionAction {
-    min-height: 24px;
-    padding: 10px 16px;
+QWidget#SoapBody { background: transparent; }
+
+/* Бейдж-літера блоку (S, O, A, P) */
+QLabel#SoapLetter {
+    background-color: #F0FDFA;
+    color: #0F766E;
+    border: 1px solid #99F6E4;
     border-radius: 8px;
-    border: 2px solid #CBD5E1;
-    background-color: #F1F5F9;
-    color: #475569;
-    font-weight: 600;
-}
-QPushButton#SessionAction:hover { background-color: #E2E8F0; color: #0F172A; }
-QPushButton#SessionAction:pressed { background-color: #CBD5E1; }
-QPushButton#SessionAction[variant="primary"] {
-    background-color: #0D9488; border-color: #0D9488; color: #FFFFFF;
-}
-QPushButton#SessionAction[variant="primary"]:hover {
-    background-color: #0F766E; border-color: #0F766E;
-}
-QPushButton#SessionAction[variant="primary"]:pressed {
-    background-color: #115E59; border-color: #115E59;
-}
-QPushButton#SessionAction[variant="outline"] {
-    background-color: #FFFFFF; border-color: #0D9488; color: #0F766E;
-}
-QPushButton#SessionAction[variant="outline"]:hover { background-color: #F0FDFA; }
-QPushButton#SessionAction[variant="outline"]:pressed { background-color: #CCFBF1; }
-QPushButton#SessionAction[variant="danger"] {
-    background-color: #FFFFFF; border-color: #FCA5A5; color: #B91C1C;
-}
-QPushButton#SessionAction[variant="danger"]:hover {
-    background-color: #FEF2F2; border-color: #F87171;
-}
-QPushButton#SessionAction[variant="danger"]:pressed { background-color: #FEE2E2; }
-QPushButton#SessionAction:focus,
-QPushButton#SessionAction[variant]:focus { border-color: #0F172A; }
-QPushButton#SessionAction:disabled,
-QPushButton#SessionAction[variant]:disabled {
-    background-color: #F1F5F9; border-color: #E2E8F0; color: #94A3B8;
+    font-size: 14px;
+    font-weight: 700;
 }
 
+/* Поле тексту всередині картки. Рамка+padding завжди дають 9px,
+   тож висота не стрибає при фокусі (AutoHeightTextEdit рахує «chrome»). */
+QTextEdit#SoapEditor {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+QTextEdit#SoapEditor:focus {
+    border: 2px solid #0D9488;
+    padding: 7px 11px;
+}
+QTextEdit#SoapEditor:read-only {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    padding: 8px 12px;
+}
+QTextEdit#SoapEditor:read-only:focus {
+    border: 2px solid #99F6E4;
+    padding: 7px 11px;
+}
+
+/* Копіювання блоку: тиха іконко-подібна кнопка, як CardIconAction */
+QPushButton#SoapCopy {
+    background-color: transparent;
+    color: #475569;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+QPushButton#SoapCopy:hover,
+QPushButton#SoapCopy:focus {
+    color: #0F766E;
+    background-color: #F0FDFA;
+    border-color: #0D9488;
+}
+QPushButton#SoapCopy:pressed { background-color: #CCFBF1; }
+QPushButton#SoapCopy[copied="true"],
+QPushButton#SoapCopy[copied="true"]:hover {
+    color: #15803D;
+    background-color: #DCFCE7;
+    border-color: #DCFCE7;
+}
+
+/* Стани :pressed для спільних кнопок лише на екрані сесії
+   (спільну базу змінює тімлід). Hover/default беруться з секції 6. */
+QWidget#SessionView QPushButton#OutlineButton:pressed { background-color: #CCFBF1; }
+QWidget#SessionView QPushButton#SecondaryButton:pressed { background-color: #CBD5E1; }
+QWidget#SessionView QPushButton#DangerButton:pressed { background-color: #FEE2E2; }
+QWidget#SessionView QPushButton#OutlineButton[copied="true"] {
+    color: #15803D;
+    background-color: #DCFCE7;
+    border-color: #DCFCE7;
+}
 
 QFrame#MedcardOverlay {
     background-color: rgba(15, 23, 42, 110);
@@ -680,3 +792,19 @@ QToolButton#CardIconAction:hover, QToolButton#CardIconAction:focus {
 }
 QToolButton#CardIconAction:pressed { background: #CCFBF1; }
 CardBlock { qproperty-accentColor: #0D9488; }
+
+/* Екран сесії: роздільник колонок невидимий (лише відступ), іконка видалення, блок пункту плану */
+QSplitter::handle { background: transparent; }
+QToolButton#CardIconAction[danger="true"] { color: #B91C1C; }
+QToolButton#CardIconAction[danger="true"]:hover,
+QToolButton#CardIconAction[danger="true"]:focus {
+    color: #B91C1C;
+    background: #FEF2F2;
+    border-color: #FCA5A5;
+}
+QToolButton#CardIconAction[danger="true"]:pressed { background: #FEE2E2; }
+QFrame#PlanItem {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+}

@@ -48,6 +48,8 @@ class SessionScreen(BaseScreen):
         layout.setContentsMargins(0, 0, 0, 0)
         self.view = SessionView(self)
         layout.addWidget(self.view)
+        # Delegate navigation to Router so its can_leave guard remains active.
+        self.view.back_requested.connect(self.router.back)
         self.view.audio.position_changed.connect(self._position_changed)
         self.view.wave.seek_requested.connect(self._seek_fraction)
         self.view.transcript.segment_clicked.connect(self.view.audio.seek)

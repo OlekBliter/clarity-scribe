@@ -75,8 +75,9 @@ SESSION_LOADING = "Завантаження сесії…"
 SESSION_EMPTY = "Нотатка сесії порожня"
 SESSION_EMPTY_SECTION = "Немає даних"
 SESSION_CRUMB = "Сесія {number}"
+SESSION_BACK = "Повернутись назад"
 SESSION_SAVE = "Зберегти правки"
-SESSION_APPROVE = "Підтвердити (Approve)"
+SESSION_APPROVE = "Підтвердити"
 SESSION_DELETE = "Видалити сесію"
 SESSION_EXPORT = "Експорт нотатки"
 SESSION_SOON = "Скоро"
@@ -92,6 +93,13 @@ SESSION_PARTS = {"transcript": "Стенограма", "audio": "Аудіоза�
 SOAP_SECTIONS = (("subjective", "Суб'єктивний"), ("objective", "Об'єктивний"),
                  ("assessment", "Оцінка"), ("plan", "План"))
 SOAP_SOURCES = "Джерела"
+SOAP_TITLE = "SOAP-нотатка"
+SESSION_MEDIA_TITLE = "Аудіозапис та транскрипт"
+SOAP_COPY = "Копіювати"
+SOAP_COPIED = "Скопійовано"
+SOAP_COPY_ALL = "Копіювати все"
+SOAP_COPY_BLOCK = "Копіювати блок: {title}"
+SOAP_PLAN_LINE = "– {text}"
 SOAP_BIOMARKER_HINT = "*Підказка за біомаркерами, не є діагнозом"
 PLAN_ORIGINS = {"doctor_stated": ("Озвучено лікарем", "success"),
                 "recommended": ("Рекомендовано", "warning")}
@@ -113,7 +121,7 @@ AUDIO_MUTE = "Вимкнути звук"
 AUDIO_UNMUTE = "Увімкнути звук"
 AUDIO_SPEED = "Швидкість відтворення"
 AUDIO_VOLUME = "Гучність"
-AUDIO_RATES = ((1.0, "1.0x"), (1.25, "1.25x"), (1.5, "1.5x"), (2.0, "2.0x"))
+AUDIO_RATES = ((1.0, "1x"), (1.25, "1.25x"), (1.5, "1.5x"), (2.0, "2x"))
 AUDIO_TIMESTAMP = "{minutes:02d}:{seconds:02d}"
 AUDIO_TIME = "{current} / {total}"
 
