@@ -24,7 +24,7 @@ from src.app.ui.widgets.badge import badge_for
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
 from src.app.ui.widgets.card import ListItemCard
-
+from src.app.ui.widgets.action_icon import ActionIcon
 
 class PatientProfileScreen(BaseScreen):
     def __init__(self, facade, router, parent=None) -> None:
@@ -43,7 +43,14 @@ class PatientProfileScreen(BaseScreen):
         self._title.setObjectName("ScreenTitle")
         self._contacts = QLabel()
         self._contacts.setObjectName("Subtitle")
-        root.addWidget(self._crumb)
+        top = QHBoxLayout()
+        top.setSpacing(metrics.SPACING)
+        back = ActionIcon("back", strings.BACK)
+        back.clicked.connect(self.router.back)
+        top.addWidget(back)
+        top.addWidget(self._crumb, alignment=Qt.AlignmentFlag.AlignVCenter)
+        top.addStretch(1)
+        root.addLayout(top)
         root.addWidget(self._title)
         root.addWidget(self._contacts)
 
