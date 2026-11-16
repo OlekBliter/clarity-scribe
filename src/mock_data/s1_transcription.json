@@ -1,0 +1,27 @@
+{
+  "language": "uk",
+  "metadata": {
+    "audio_duration_sec": 1965.0,
+    "doctor_speaking_time_sec": 450.0,
+    "patient_speaking_time_sec": 1400.0,
+    "silence_time_sec": 115.0
+  },
+  "segments": [
+    {
+      "segment_id": 0,
+      "speaker": "DOCTOR",
+      "start_time": 2.0,
+      "end_time": 5.0,
+      "text": "Доброго дня.",
+      "confidence": 0.95
+    },
+    {
+      "segment_id": 1,
+      "speaker": "PATIENT",
+      "start_time": 6.0,
+      "end_time": 9.0,
+      "text": "Дуже важко, немає сил.",
+      "confidence": 0.91
+    }
+  ]
+}

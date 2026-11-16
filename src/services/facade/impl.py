@@ -17,7 +17,8 @@ from __future__ import annotations
 from functools import wraps
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
 from src.database.connection import Database
 from src.database.repos import (
@@ -28,12 +29,14 @@ from src.database.repos import (
     SoapNotesRepo,
     TranscriptRepo,
 )
+from src.schemas.contracts import DoctorCommand, Edit
 
 from .facade import ClarityScribeFacade, ProgressCallback
-
 from src.database.exceptions import RepositoryError
 from src.services.orchestrator.errors import DoctorInputError, StepFailedError
 from .facade import FacadeError
+from .views import build_soap_view, build_card_view
+from .registry import mmss
 
 if TYPE_CHECKING:
     from src.services.orchestrator import Orchestrator
@@ -44,6 +47,23 @@ _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
 
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+def _build_doctor_command(
+    target: Literal["card", "soap"],
+    entity_id: str,
+    action: Literal["edit", "approve"],
+    edits: list[dict[str, Any]],
+    review_started_at: datetime,
+) -> DoctorCommand:
+    return DoctorCommand(
+        target=target,
+        id=entity_id,
+        action=action,
+        edits=[Edit(path=edit["path"], new_value=edit["new_value"]) for edit in edits],
+        review_started_at=review_started_at,
+        at=datetime.now(review_started_at.tzinfo),
+    )
 
 
 def _guard(method: F) -> F:
@@ -138,16 +158,12 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         raise NotImplementedError
 
     @_guard
-    def add_session(
-        self, patient_id: str, wav_path: str, language: str, session_date: str
-    ) -> str:
+    def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
         """Register a new recording via the Orchestrator and return its id."""
         raise NotImplementedError
 
     @_guard
-    def process_session(
-        self, session_id: str, on_progress: ProgressCallback | None = None
-    ) -> None:
+    def process_session(self, session_id: str, on_progress: ProgressCallback | None = None) -> None:
         """Run the pipeline steps until the session needs the doctor."""
         raise NotImplementedError
 
@@ -166,57 +182,119 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     @_guard
     def get_soap(self, session_id: str) -> dict[str, Any]:
         """SOAP note of a session, shaped by ``views.py`` (read-only)."""
-        raise NotImplementedError
+        with self._db.read() as conn:
+            session = self._sessions.get(conn, session_id)
+            patient = self._patients.get(conn, session["patient_id"])
+            soap = self._soap.get(conn, session_id)
+            
+            if soap["status"] == "generated":
+                raise FacadeError("Нотатка ще не готова.")
+            
+            segments = self._transcript.get_segments(conn, session_id)
+            biomarkers = self._biomarkers.find(conn, session_id)
+            session["biomarkers"] = biomarkers
+            
+            first_session = None
+            if session["session_number"] != 1:
+                first_session = self._sessions.get_by_number(conn, session["patient_id"], 1)
+                first_session["biomarkers"] = self._biomarkers.find(conn, first_session["session_id"])
+                
+        return build_soap_view(soap, session, patient, first_session, segments)
 
     @_guard
-    def save_soap(
-        self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime
-    ) -> None:
+    def save_soap(self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's SOAP edits without approving."""
-        raise NotImplementedError
+        cmd = _build_doctor_command("soap", session_id, "edit", edits, review_started_at)
+        self._o.apply_doctor_command(cmd)
 
     @_guard
-    def approve_soap(
-        self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime
-    ) -> None:
+    def approve_soap(self, session_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's SOAP edits and approve the note."""
-        raise NotImplementedError
+        cmd = _build_doctor_command("soap", session_id, "approve", edits, review_started_at)
+        self._o.apply_doctor_command(cmd)
 
     @_guard
     def get_transcript(self, session_id: str) -> list[dict[str, Any]]:
         """Transcript segments of a session (read-only)."""
-        raise NotImplementedError
+        with self._db.read() as conn:
+            segments = self._transcript.get_segments(conn, session_id)
+            
+        return [
+            {
+                "segment_id": s["segment_id"],
+                "speaker": s["speaker"],
+                "start": s["start_time"],
+                "end": s["end_time"],
+                "time": mmss(s["start_time"]),
+                "text": s["text_raw"],
+            }
+            for s in segments
+        ]
+
+    def _resolve_audio_path(self, audio_path: str | None) -> str | None:
+        if not audio_path:
+            return None
+        path = Path(audio_path)
+        if not path.is_absolute():
+            path = self._o.data_dir / path
+        path = path.resolve()
+        return str(path) if path.is_file() else None
 
     @_guard
     def get_audio_info(self, session_id: str) -> dict[str, Any]:
         """Audio file path and duration for the player (read-only)."""
-        raise NotImplementedError
+        from src.services.orchestrator.audio_files import duration_seconds
+        with self._db.read() as conn:
+            session = self._sessions.get(conn, session_id)
+        
+        path = self._resolve_audio_path(session.get("audio_path"))
+        if path is None:
+            return {"path": None, "duration": 0.0}
+            
+        return {"path": path, "duration": duration_seconds(path)}
 
     @_guard
     def get_waveform(self, session_id: str) -> list[float]:
         """Waveform peaks for drawing the audio track (read-only)."""
-        raise NotImplementedError
+        from src.services.orchestrator.audio_files import waveform_peaks
+        with self._db.read() as conn:
+            session = self._sessions.get(conn, session_id)
+            
+        path = self._resolve_audio_path(session.get("audio_path"))
+        if path is None:
+            return []
+            
+        return [float(p) for p in waveform_peaks(path, bins=900)]
 
     # -------------------------------------------------------------- medical card
 
     @_guard
     def get_card(self, patient_id: str) -> dict[str, Any]:
         """Medical card of a patient, shaped by ``views.py`` (read-only)."""
-        raise NotImplementedError
+        with self._db.read() as conn:
+            card = self._cards.find(conn, patient_id)
+            if not card:
+                raise FacadeError("Медкартка ще не готова.")
+            if card["status"] == "generated":
+                raise FacadeError("Медкартка ще не готова.")
+                
+            patient = self._patients.get(conn, patient_id)
+            first_session = self._sessions.get_by_number(conn, patient_id, 1)
+            segments = self._transcript.get_segments(conn, first_session["session_id"])
+            
+        return build_card_view(card, patient, segments, first_session["session_date"])
 
     @_guard
-    def save_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
-    ) -> None:
+    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's card edits without approving."""
-        raise NotImplementedError
+        cmd = _build_doctor_command("card", patient_id, "edit", edits, review_started_at)
+        self._o.apply_doctor_command(cmd)
 
     @_guard
-    def approve_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
-    ) -> None:
+    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
         """Save the doctor's card edits and approve the card."""
-        raise NotImplementedError
+        cmd = _build_doctor_command("card", patient_id, "approve", edits, review_started_at)
+        self._o.apply_doctor_command(cmd)
 
     # ------------------------------------------------------------------ dynamics
 

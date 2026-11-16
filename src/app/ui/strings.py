@@ -230,3 +230,23 @@ NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
 NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
 
 BTN_NEXT = "Далі - додати запис сесії"
+
+ARCHIVE_TITLE = "Архів пацієнтів"
+ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
+ARCHIVE_STATUS_ALL = "Всі статуси"
+ARCHIVE_SORT_DEFAULT = "Сортування"
+BTN_RESTORE = "Відновити"
+BTN_VIEW = "Переглянути"
+TOAST_SOON = "Скоро"
+
+PATIENT_SIDORENKO = "Сидоренко Михайло"
+PATIENT_HRYHORENKO = "Григоренко Анна"
+PATIENT_LYSENKO = "Лисенко Роман"
+PATIENT_KRAVCHUK = "Кравчук Наталія"
+
+ARCHIVE_SUBTITLE = "12 сесій • завершено 15.08.2026"
+STATUS_COMPLETED = "Терапію завершено"
+STATUS_SUSPENDED = "Призупинено"
+STATUS_INTERRUPTED = "Перервано"
+ARCHIVE_EMPTY = "Пацієнтів не знайдено"
+
