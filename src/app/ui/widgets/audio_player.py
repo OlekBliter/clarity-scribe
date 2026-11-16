@@ -4,14 +4,111 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
+from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, QSize, Qt, QUrl, Signal
+from PySide6.QtGui import (
+    QFontDatabase, QPainter, QPainterPath, QPen, QResizeEvent,
+)
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QComboBox, QFrame, QHBoxLayout, QLabel,
     QPushButton, QSlider, QWidget,
 )
 
-from app.ui import metrics as M, strings as S
+from src.app.ui import metrics as M, strings as S
+
+
+class _GlyphButton(QPushButton):
+    """Button whose vector glyph is tinted by the QSS ``color`` property.
+
+    Glyphs: ``play``, ``pause``, ``volume``, ``muted``. Background, radius and
+    states come from theme.qss; only the icon is painted here.
+    """
+
+    def __init__(self, glyph: str, parent: QWidget | None = None) -> None:
+        """Create a focusable, pointer-cursor button showing ``glyph``."""
+        super().__init__(parent)
+        self._glyph = glyph
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def set_glyph(self, glyph: str) -> None:
+        """Switch the painted glyph."""
+        if glyph != self._glyph:
+            self._glyph = glyph
+            self.update()
+
+    def sizeHint(self) -> QSize:
+        """The glyph button has a fixed footprint; QSS padding must not widen it."""
+        return self.minimumSize()
+
+    def minimumSizeHint(self) -> QSize:
+        """Match the fixed size so layouts never report more than is available."""
+        return self.minimumSize()
+
+    def paintEvent(self, event) -> None:
+        """Draw the QSS background, then the glyph on a fixed design grid."""
+        super().paintEvent(event)
+        grid = M.AUDIO_GLYPH_GRID
+        scale = min(self.width(), self.height()) / grid
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate((self.width() - grid * scale) / 2, (self.height() - grid * scale) / 2)
+        painter.scale(scale, scale)
+        color = self.palette().buttonText().color()
+        pen = QPen(color, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                   Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(color)
+        if self._glyph == "play":
+            path = QPainterPath()
+            path.moveTo(15, 11)
+            path.lineTo(15, 29)
+            path.lineTo(29, 20)
+            path.closeSubpath()
+            painter.drawPath(path)
+        elif self._glyph == "pause":
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(QRectF(13, 11, 5, 18), 1.5, 1.5)
+            painter.drawRoundedRect(QRectF(22, 11, 5, 18), 1.5, 1.5)
+        else:
+            body = QPainterPath()
+            body.moveTo(8, 16)
+            body.lineTo(14, 16)
+            body.lineTo(20, 10)
+            body.lineTo(20, 30)
+            body.lineTo(14, 24)
+            body.lineTo(8, 24)
+            body.closeSubpath()
+            painter.drawPath(body)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            if self._glyph == "muted":
+                painter.drawLine(QPointF(25, 15), QPointF(33, 25))
+                painter.drawLine(QPointF(33, 15), QPointF(25, 25))
+            else:
+                painter.drawArc(QRectF(17, 14, 12, 12), -50 * 16, 100 * 16)
+                painter.drawArc(QRectF(14, 9, 22, 22), -50 * 16, 100 * 16)
+        painter.end()
+
+
+class _SpeedChip(QComboBox):
+    """Playback-rate combo styled as a pill, with a painted chevron.
+
+    The icon set has no arrow asset, so the chevron is drawn in the QSS text color.
+    """
+
+    def paintEvent(self, event) -> None:
+        """Draw the QSS pill, then a small chevron at the right edge."""
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self.palette().buttonText().color(), 1.6, Qt.PenStyle.SolidLine,
+                            Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        x = self.width() - M.AUDIO_CHEVRON_INSET
+        y = self.height() / 2.0
+        half = M.AUDIO_CHEVRON_HALF
+        painter.drawPolyline([QPointF(x - half, y - half / 2), QPointF(x, y + half / 2),
+                              QPointF(x + half, y - half / 2)])
+        painter.end()
 
 
 class AudioPlayer(QFrame):
@@ -33,13 +130,19 @@ class AudioPlayer(QFrame):
         self.player = QMediaPlayer(self)
         self.audio_output = QAudioOutput(self)
         self.player.setAudioOutput(self.audio_output)
-        self.play_button = QPushButton(S.AUDIO_PLAY, self)
+        self.play_button = _GlyphButton("play", self)
         self.play_button.setObjectName("AudioPlay")
+        self.play_button.setFixedSize(M.AUDIO_PLAY_SIZE, M.AUDIO_PLAY_SIZE)
         self.time_label = QLabel(self)
         self.time_label.setObjectName("AudioTime")
-        self.speed = QComboBox(self)
+        # Fixed-pitch digits keep the clock from jittering while it ticks.
+        self.time_label.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.time_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.speed = _SpeedChip(self)
         self.speed.setObjectName("AudioSpeed")
         self.speed.setAccessibleName(S.AUDIO_SPEED)
+        self.speed.setToolTip(S.AUDIO_SPEED)
+        self.speed.setFixedSize(M.AUDIO_CHIP_WIDTH, M.AUDIO_CHIP_HEIGHT)
         for rate, label in S.AUDIO_RATES:
             self.speed.addItem(label, rate)
         self.volume = QSlider(Qt.Orientation.Horizontal, self)
@@ -47,19 +150,29 @@ class AudioPlayer(QFrame):
         self.volume.setAccessibleName(S.AUDIO_VOLUME)
         self.volume.setRange(0, M.AUDIO_VOLUME_MAX)
         self.volume.setValue(M.AUDIO_VOLUME_INITIAL)
-        self.volume.setMaximumWidth(M.AUDIO_VOLUME_WIDTH)
-        self.mute_button = QPushButton(S.AUDIO_MUTE, self)
+        self.volume.setFixedWidth(M.AUDIO_VOLUME_WIDTH)
+        self.mute_button = _GlyphButton("volume", self)
         self.mute_button.setObjectName("AudioMute")
         self.mute_button.setCheckable(True)
+        self.mute_button.setFixedSize(M.AUDIO_ICON_BUTTON_SIZE, M.AUDIO_ICON_BUTTON_SIZE)
+        self.mute_button.setToolTip(S.AUDIO_MUTE)
+        self.mute_button.setAccessibleName(S.AUDIO_MUTE)
+        self.play_button.setToolTip(S.AUDIO_PLAY)
+        self.play_button.setAccessibleName(S.AUDIO_PLAY)
+        # One fixed-height row, every control centred on the same axis.
         layout = QHBoxLayout(self)
         layout.setContentsMargins(*M.AUDIO_MARGINS)
         layout.setSpacing(M.SPACING)
-        layout.addWidget(self.play_button)
-        layout.addWidget(self.time_label)
-        layout.addStretch()
-        layout.addWidget(self.speed)
-        layout.addWidget(self.volume)
-        layout.addWidget(self.mute_button)
+        center = Qt.AlignmentFlag.AlignVCenter
+        layout.addWidget(self.play_button, 0, center)
+        layout.addWidget(self.time_label, 0, center)
+        layout.addStretch(1)
+        layout.addWidget(self.speed, 0, center)
+        sound = QHBoxLayout()  # mute + volume read as one control, so they sit closer
+        sound.setSpacing(M.SPACING_SMALL)
+        sound.addWidget(self.mute_button, 0, center)
+        sound.addWidget(self.volume, 0, center)
+        layout.addLayout(sound)
         self.play_button.clicked.connect(self._toggle_play)
         self.speed.currentIndexChanged.connect(self._set_rate)
         self.volume.valueChanged.connect(self._set_volume)
@@ -140,7 +253,10 @@ class AudioPlayer(QFrame):
     def _sync_play(self, state: QMediaPlayer.PlaybackState) -> None:
         """Update the play button from the actual playback state."""
         playing = state == QMediaPlayer.PlaybackState.PlayingState
-        self.play_button.setText(S.AUDIO_PAUSE if playing else S.AUDIO_PLAY)
+        label = S.AUDIO_PAUSE if playing else S.AUDIO_PLAY
+        self.play_button.set_glyph("pause" if playing else "play")
+        self.play_button.setToolTip(label)
+        self.play_button.setAccessibleName(label)
 
     def _set_rate(self, index: int) -> None:
         """Apply the selected playback rate to the media engine."""
@@ -159,7 +275,15 @@ class AudioPlayer(QFrame):
         """Reflect mute state without changing the saved volume level."""
         with QSignalBlocker(self.mute_button):
             self.mute_button.setChecked(muted)
-        self.mute_button.setText(S.AUDIO_UNMUTE if muted else S.AUDIO_MUTE)
+        label = S.AUDIO_UNMUTE if muted else S.AUDIO_MUTE
+        self.mute_button.set_glyph("muted" if muted else "volume")
+        self.mute_button.setToolTip(label)
+        self.mute_button.setAccessibleName(label)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Drop the volume slider in narrow columns instead of clipping controls."""
+        super().resizeEvent(event)
+        self.volume.setVisible(event.size().width() >= M.AUDIO_COMPACT_WIDTH)
 
     def _on_position(self, position_ms: int) -> None:
         """Refresh the clock and publish the playback position in seconds."""

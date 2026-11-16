@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from src.app.ui import metrics as M, strings as S
 from src.app.ui.qt_helpers import fit_combo_popup
 from src.app.ui.widgets.source_chip import SourceChip
+from src.app.ui.widgets.flow_layout import FlowLayout
 
 BOOL_FIELDS = {"history.on_medication", "safety.suicidal_past",
                "safety.suicidal_now", "contacts.emergency_consent"}
@@ -36,7 +37,7 @@ def value_text(value) -> str:
 class CardPanel(QFrame):
     """Keep full content scrollable and apply local edits on close."""
 
-    def __init__(self, host, title, fields, editable, apply, origin=None, remove_source=None) -> None:
+    def __init__(self, host, title, fields, editable, apply, origin=None) -> None:
         super().__init__(host)
         self.setObjectName("MedcardOverlay")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
@@ -54,13 +55,6 @@ class CardPanel(QFrame):
         layout.setSpacing(M.SPACING)
         header = QHBoxLayout()
         header.addWidget(label(title, "SectionTitle"), 1)
-        if remove_source is not None:
-            remove = ActionIcon("trash", S.MEDCARD_REMOVE_SOURCE, self.box)
-            def remove_and_close():
-                remove_source()
-                self.finish()
-            remove.clicked.connect(remove_and_close)
-            header.addWidget(remove)
         close = QPushButton(S.MEDCARD_PANEL_CLOSE)
         close.setObjectName("OutlineButton")
         close.setAccessibleName(S.MEDCARD_PANEL_CLOSE_LABEL)
@@ -110,18 +104,19 @@ class CardPanel(QFrame):
                     column.addWidget(full)
             if field.get("contradiction_text"):
                 column.addWidget(label(field["contradiction_text"]))
+            sources = FlowLayout()
             for source in field.get("sources", []):
                 chip = SourceChip(source["time"], source["segment_id"], body)
                 chip.setToolTip(source["quote"])
-                row = QWidget(body)
-                source_layout = QHBoxLayout(row)
-                source_layout.setContentsMargins(0, 0, 0, 0)
-                source_layout.addWidget(chip)
+                chip.set_removable(editable)
+                chip.remove_requested.connect(
+                    lambda _id, src=source, key=key, chip=chip:
+                    self._remove_source(key, src, chip))
                 chip.segment_clicked.connect(
-                    lambda _id, src=source, key=key, row=row:
-                    host._show_quote(src, key, self, row))
-                source_layout.addStretch()
-                column.addWidget(row)
+                    lambda _id, src=source, key=key, row=chip:
+                    host._open_source(src, key))
+                sources.addWidget(chip)
+            column.addLayout(sources)
         if not (len(fields) == 1 and fields[0]["field_id"] == "quote"):
             column.addStretch()
         scroll.setWidget(body)

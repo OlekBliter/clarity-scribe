@@ -162,7 +162,8 @@ class MedicalCardScreen(BaseScreen):
                     widget = CardBlock(S.MEDCARD_BLOCKS[block], entries, data["editable"], holder)
                     self.editors.update(widget.editors)
                 widget.open_requested.connect(self._open_block)
-                widget.source_requested.connect(self._show_quote)
+                widget.source_requested.connect(self._open_source)
+                widget.source_removed.connect(self._remove_source)
                 layout.addWidget(widget)
             layouts[column] = layout
             columns.addWidget(holder, 1)
@@ -170,7 +171,8 @@ class MedicalCardScreen(BaseScreen):
         if remaining:
             extra = CardBlock(S.MEDCARD_EXTRA, remaining, data["editable"], content)
             extra.open_requested.connect(self._open_block)
-            extra.source_requested.connect(self._show_quote)
+            extra.source_requested.connect(self._open_source)
+            extra.source_removed.connect(self._remove_source)
             layouts["left"].addWidget(extra)
             self.editors.update(extra.editors)
         for layout in layouts.values():
@@ -224,21 +226,29 @@ class MedicalCardScreen(BaseScreen):
         self._render_current(self._data, self._request_id)
         self._scroll.verticalScrollBar().setValue(position)
 
-    def _show_quote(self, source: dict, field_id=None, owner=None, row=None) -> None:
-        remove = None
-        if field_id is not None and self._data and self._data["editable"]:
-            if owner is not None:
-                remove = lambda: owner._remove_source(field_id, source, row)
-            else:
-                def remove():
-                    field = next(f for f in self._data["fields"] if f["field_id"] == field_id)
-                    sources = list(field["sources"])
-                    sources.remove(source)
-                    self._apply_changes({}, {field_id: sources})
-        fields = [{"field_id": "quote", "title": S.MEDCARD_QUOTE, "value": source["quote"]}]
-        panel = CardPanel(self, S.MEDCARD_SOURCE_TITLE.format(time=source["time"]),
-                          fields, False, lambda changes, sources: None, remove_source=remove)
-        self._panels.append(panel)
+    def _remove_source(self, source: dict, field_id: str) -> None:
+        if not self._data or not self._data["editable"]:
+            return
+        field = next(f for f in self._data["fields"] if f["field_id"] == field_id)
+        sources = list(self._source_edits.get(field_id, field["sources"]))
+        if source in sources:
+            sources.remove(source)
+            self._apply_changes({}, {field_id: sources})
+
+    def _open_source(self, source: dict, field_id=None) -> None:
+        patient_id, request_id = self._patient_id, self._request_id
+
+        def open_session(profile):
+            if not self._current(request_id):
+                return
+            first = next((item for item in profile["sessions"] if item["number"] == 1), None)
+            if first is None:
+                return
+            self.router.go(Route.SESSION, patient_id=patient_id,
+                           session_id=first["session_id"], source_segment_id=source["segment_id"])
+
+        self.call(self.facade.get_patient_profile, patient_id, on_success=open_session,
+                  on_error=lambda exc: self.window().toast.show_message(str(exc)))
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

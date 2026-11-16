@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePol
 from src.app.ui import metrics, strings as S
 from src.app.ui.widgets.badge import Badge
 from src.app.ui.widgets.source_chip import SourceChip
+from src.app.ui.widgets.flow_layout import FlowLayout
 from .preview import TextPreview
 from .panel import label as text_label, value_text as display_value
 
@@ -18,6 +19,7 @@ class CardBlock(QFrame):
 
     open_requested = Signal(object)
     source_requested = Signal(object, str)
+    source_removed = Signal(object, str)
 
     def __init__(self, title: str, fields: list[dict], editable: bool, parent=None) -> None:
         super().__init__(parent)
@@ -148,11 +150,16 @@ class CardBlock(QFrame):
         self.column.addWidget(TextPreview(caption))
         if field["contradiction_text"]:
             self.column.addWidget(TextPreview(field["contradiction_text"]))
+        sources = FlowLayout()
         for source in field["sources"][:metrics.MEDCARD_PREVIEW_SOURCES]:
             chip = SourceChip(source["time"], source["segment_id"], self)
             chip.setToolTip(source["quote"])
+            chip.set_removable(self.editable)
+            chip.remove_requested.connect(
+                lambda _id, src=source, key=key: self.source_removed.emit(src, key))
             chip.segment_clicked.connect(lambda _id, src=source, key=key: self.source_requested.emit(src, key))
-            self.column.addWidget(chip, alignment=Qt.AlignmentFlag.AlignLeft)
+            sources.addWidget(chip)
+        self.column.addLayout(sources)
 
     def _badge(self, caption: str, variant: str) -> None:
         badge = Badge(caption, variant, self)

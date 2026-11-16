@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QPushButton, QSizePolicy, QWidget
+from PySide6.QtWidgets import QMenu, QPushButton, QSizePolicy, QWidget
 
 from src.app.ui import strings as S
 
@@ -16,6 +16,7 @@ class SourceChip(QPushButton):
     """
 
     segment_clicked = Signal(int)
+    remove_requested = Signal(int)
 
     def __init__(
         self, time_text: str, segment_id: int, parent: QWidget | None = None
@@ -29,6 +30,7 @@ class SourceChip(QPushButton):
         """
         super().__init__(parent)
         self._segment_id = segment_id
+        self._removable = False
         self.setObjectName("SourceChip")
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -38,3 +40,19 @@ class SourceChip(QPushButton):
     def _activate(self, checked: bool = False) -> None:
         """Emit the segment identifier; ignore the button's checked state."""
         self.segment_clicked.emit(self._segment_id)
+
+    def set_removable(self, removable: bool) -> None:
+        self._removable = removable
+        if removable:
+            self.setToolTip(self.toolTip() + "\n" + S.SOURCE_REMOVE_HINT)
+
+    def contextMenuEvent(self, event) -> None:
+        if not self._removable:
+            event.ignore()
+            return
+        menu = QMenu(self)
+        menu.setObjectName("SourceMenu")
+        remove = menu.addAction(S.SOURCE_REMOVE)
+        if menu.exec(event.globalPos()) == remove:
+            self.remove_requested.emit(self._segment_id)
+        event.accept()
