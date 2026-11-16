@@ -37,6 +37,7 @@ from src.app.ui.widgets.stage_list import StageList
 from src.app.ui.widgets.date_field import DateField
 from src.app.workers.pipeline_worker import PipelineWorker
 from src.app.ui.qt_helpers import fit_combo_popup
+from src.app.ui.widgets.action_icon import ActionIcon
 
 log = logging.getLogger(__name__)
 _ISO_DATE = "yyyy-MM-dd"
@@ -57,7 +58,14 @@ class AddSessionScreen(BaseScreen):
         self._crumb = Breadcrumb()
         title = QLabel(strings.ADD_TITLE)
         title.setObjectName("ScreenTitle")
-        root.addWidget(self._crumb)
+        top = QHBoxLayout()
+        top.setSpacing(metrics.SPACING)
+        back = ActionIcon("back", strings.BACK)
+        back.clicked.connect(self.router.back)
+        top.addWidget(back)
+        top.addWidget(self._crumb, alignment=Qt.AlignmentFlag.AlignVCenter)
+        top.addStretch(1)
+        root.addLayout(top)
         root.addWidget(title)
 
         body = QHBoxLayout()
