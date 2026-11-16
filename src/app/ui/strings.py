@@ -241,6 +241,36 @@ DYNAMICS_SLOPE_UNITS = {
 }
 
 # --- Вероніка: Новий пацієнт, Налаштування, Архів ---
+NEW_PATIENT_TITLE = "Новий пацієнт"
+NEW_PATIENT_SUBTITLE = "Усі поля необов'язкові — картку можна заповнити пізніше"
+NEW_PATIENT_CARD_MAIN = "Основні контакти"
+NEW_PATIENT_CARD_EMERGENCY = "Екстрений контакт"
+
+NEW_PATIENT_NAME_LABEL = "Прізвище та ім'я"
+NEW_PATIENT_NAME_PLACEHOLDER = "Наприклад: Мельник Олена"
+NEW_PATIENT_BIRTH_LABEL = "Дата народження"
+NEW_PATIENT_BIRTH_PLACEHOLDER = "дд.мм.рррр"
+NEW_PATIENT_PHONE_LABEL = "Телефон"
+NEW_PATIENT_PHONE_PLACEHOLDER = "+380 XX XXX XX XX"
+NEW_PATIENT_EMAIL_LABEL = "Email"
+NEW_PATIENT_EMAIL_PLACEHOLDER = "name@example.com"
+NEW_PATIENT_CHANNEL_LABEL = "Зручний канал зв'язку"
+
+NEW_PATIENT_EMERG_NAME_LABEL = "Ім'я контакту"
+NEW_PATIENT_EMERG_NAME_PLACEHOLDER = "Ім'я близької людини"
+NEW_PATIENT_EMERG_REL_LABEL = "Стосунок"
+NEW_PATIENT_EMERG_PHONE_LABEL = "Телефон екстреного контакту"
+NEW_PATIENT_EMERG_CONSENT = "Пацієнт надав згоду на звернення до екстреного контакту"
+
+NEW_PATIENT_HINT_PHONE = "Формат: +380..."
+NEW_PATIENT_HINT_EMAIL = "Перевірте формат email"
+NEW_PATIENT_HINT_DATE = "Формат дати: дд.мм.рррр"
+
+NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
+NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
+
+BTN_NEXT = "Далі - додати запис сесії"
+
 ARCHIVE_TITLE = "Архів пацієнтів"
 ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
 ARCHIVE_STATUS_ALL = "Всі статуси"
