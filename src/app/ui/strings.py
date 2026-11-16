@@ -259,3 +259,6 @@ STATUS_COMPLETED = "Терапію завершено"
 STATUS_SUSPENDED = "Призупинено"
 STATUS_INTERRUPTED = "Перервано"
 ARCHIVE_EMPTY = "Пацієнтів не знайдено"
+SOURCE_REMOVE_HINT = "Права кнопка миші — видалити джерело"
+
+SOURCE_REMOVE = "Видалити"

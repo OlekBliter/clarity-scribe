@@ -1,11 +1,10 @@
 """Session screen layout and loading/empty/error presentation."""
 from __future__ import annotations
 
-from PySide6.QtCore import Property, QPointF, Qt, Signal
-from PySide6.QtGui import QColor, QPaintEvent, QPainter, QPen
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractButton, QFrame, QHBoxLayout, QLabel, QSplitter,
-    QStackedWidget, QToolButton, QVBoxLayout, QWidget,
+    QAbstractButton, QBoxLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QSplitter,
+    QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 from src.app.ui import metrics as M, strings as S
 from src.app.ui.widgets.action_icon import ActionIcon
@@ -18,43 +17,6 @@ from src.app.ui.widgets.skeleton import Skeleton
 from src.app.ui.widgets.transcript_view import TranscriptView
 from src.app.ui.widgets.waveform_widget import WaveformWidget
 from .soap_panel import SoapPanel
-
-
-class _BackArrowButton(QToolButton):
-    """Icon-only back control matching the medical-card header screenshot."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._arrow_color = QColor(Qt.GlobalColor.darkGray)
-        self.setObjectName("SessionBack")
-        self.setFixedSize(M.SESSION_BACK_SIZE, M.SESSION_BACK_SIZE)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(S.SESSION_BACK)
-        self.setAccessibleName(S.SESSION_BACK)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-    def _get_arrow_color(self) -> QColor:
-        return self._arrow_color
-
-    def _set_arrow_color(self, color: QColor) -> None:
-        self._arrow_color = color
-        self.update()
-
-    arrowColor = Property(QColor, _get_arrow_color, _set_arrow_color)
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(self._arrow_color, M.SESSION_BACK_STROKE,
-                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                            Qt.PenJoinStyle.RoundJoin))
-        center = self.rect().center()
-        tip = QPointF(center.x() - 9.5, center.y())
-        painter.drawLine(tip, QPointF(center.x() + 9.5, center.y()))
-        painter.drawLine(tip, QPointF(center.x() - 2.5, center.y() - 7))
-        painter.drawLine(tip, QPointF(center.x() - 2.5, center.y() + 7))
-        painter.end()
 
 
 def _heading(text: str) -> QLabel:
@@ -87,10 +49,12 @@ class SessionView(QWidget):
         """Create the session header, state pages, columns, and action buttons."""
         super().__init__(parent)
         self.setObjectName("SessionView")
+        self._compact = None
+        self._split_sizes = []
         root = QVBoxLayout(self)
         root.setContentsMargins(*(M.SESSION_MARGIN,) * 4)
         root.setSpacing(M.SPACING)
-        self.back = _BackArrowButton(self)
+        self.back = ActionIcon("back", S.SESSION_BACK, self)
         self.back.clicked.connect(lambda _checked=False: self.back_requested.emit())
         self.crumb = Breadcrumb()
         self.crumb.setWordWrap(True)
@@ -110,12 +74,13 @@ class SessionView(QWidget):
         top_actions.setSpacing(M.SPACING)
         top_actions.addWidget(self.delete)
         top_actions.addWidget(self.export)
-        top = QHBoxLayout()
+        top = self._top = QGridLayout()
         top.setSpacing(M.SPACING)
-        top.addWidget(self.back, 0, Qt.AlignmentFlag.AlignVCenter)
-        top.addWidget(self.crumb, 1)
-        top.addWidget(self.top_actions, 0, Qt.AlignmentFlag.AlignVCenter)
-        header = QHBoxLayout()
+        top.addWidget(self.back, 0, 0, Qt.AlignmentFlag.AlignVCenter)
+        top.addWidget(self.crumb, 0, 1)
+        top.setColumnStretch(1, 1)
+        top.addWidget(self.top_actions, 0, 2, Qt.AlignmentFlag.AlignRight)
+        header = self._header = QBoxLayout(QBoxLayout.Direction.LeftToRight)
         header.setSpacing(M.SPACING)
         header.addWidget(self.title, 1)
         header.addWidget(self.badge, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -141,7 +106,7 @@ class SessionView(QWidget):
         self.columns.setHandleWidth(M.SPACING)
 
         # Left column: heading + "copy whole note" + scrollable S/O/A/P cards.
-        left = QWidget()
+        left = self._left = QWidget()
         left.setMinimumWidth(M.SESSION_COLUMN_MIN_WIDTH)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -154,7 +119,7 @@ class SessionView(QWidget):
         self.columns.addWidget(left)
 
         # Right column: one card holding waveform + transport, then the transcript.
-        right = QWidget()
+        right = self._right = QWidget()
         right.setMinimumWidth(M.SESSION_COLUMN_MIN_WIDTH)
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -184,19 +149,27 @@ class SessionView(QWidget):
         self.columns.addWidget(right)
         self.columns.setStretchFactor(0, 1)
         self.columns.setStretchFactor(1, 1)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("SessionTabs")
+        self.tabs.setDocumentMode(True)
+        self.tabs.tabBar().setExpanding(True)
+        self.tabs.tabBar().setDrawBase(False)
         self.pages.addWidget(self.columns)
+        self.pages.addWidget(self.tabs)
+        self.soap.source_clicked.connect(self._show_source)
 
         # Footer: same order and styles as the medical card (outline, then primary).
         self.save = outline_button(S.SESSION_SAVE)
         self.approve = primary_button(S.SESSION_APPROVE)
         self.action_bar = QWidget()
-        actions = QHBoxLayout(self.action_bar)
+        actions = self._actions = QBoxLayout(QBoxLayout.Direction.LeftToRight, self.action_bar)
         actions.setContentsMargins(0, M.SPACING_SMALL, 0, 0)
         actions.setSpacing(M.SPACING)
         actions.addStretch(1)
         actions.addWidget(self.save)
         actions.addWidget(self.approve)
         root.addWidget(self.action_bar)
+        self._adapt_layout(self.width())
         self.set_state("loading")
 
     @property
@@ -212,7 +185,49 @@ class SessionView(QWidget):
         if state == "loading":
             self.pages.setCurrentWidget(self.loading)
         elif state == "ready":
-            self.pages.setCurrentWidget(self.columns)
+            self.pages.setCurrentWidget(self.tabs if self._compact else self.columns)
         else:
             self.message.setText(text)
             self.pages.setCurrentWidget(self.message)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._adapt_layout(event.size().width())
+
+    def _adapt_layout(self, width: int) -> None:
+        compact = width < M.SESSION_COMPACT_WIDTH
+        narrow = width < M.SESSION_NARROW_WIDTH
+        margin = M.SESSION_COMPACT_MARGIN if compact else M.SESSION_MARGIN
+        self.layout().setContentsMargins(margin, margin, margin, margin)
+        direction = (QBoxLayout.Direction.TopToBottom if narrow
+                     else QBoxLayout.Direction.LeftToRight)
+        self._header.setDirection(direction)
+        self._actions.setDirection(direction)
+        self._actions.setStretch(0, 0 if narrow else 1)
+        self._top.removeWidget(self.top_actions)
+        if narrow:
+            self._top.addWidget(self.top_actions, 1, 0, 1, 3, Qt.AlignmentFlag.AlignRight)
+        else:
+            self._top.addWidget(self.top_actions, 0, 2, Qt.AlignmentFlag.AlignRight)
+        if compact == self._compact:
+            return
+        self._compact = compact
+        if compact:
+            self._split_sizes = self.columns.sizes()
+            self.tabs.addTab(self._left, S.SOAP_TITLE)
+            self.tabs.addTab(self._right, S.SESSION_MEDIA_TITLE)
+        else:
+            while self.tabs.count():
+                self.tabs.removeTab(0)
+            self.columns.addWidget(self._left)
+            self.columns.addWidget(self._right)
+            self._left.show()
+            self._right.show()
+            if any(self._split_sizes):
+                self.columns.setSizes(self._split_sizes)
+        if self.property("state") == "ready":
+            self.pages.setCurrentWidget(self.tabs if compact else self.columns)
+
+    def _show_source(self, _segment_id: int) -> None:
+        if self._compact:
+            self.tabs.setCurrentWidget(self._right)

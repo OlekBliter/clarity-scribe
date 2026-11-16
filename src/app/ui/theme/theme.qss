@@ -631,24 +631,6 @@ QSlider#AudioVolume::handle:horizontal:disabled {
    14. ЗОНА: ЕКРАН СЕСІЇ (SOAP)                       (Кобильник)
    Картки S/O/A/P — це QFrame#Card, як блоки медкартки.
    =================================================================== */
-/* SOAP: кнопка повернення як у медкартці (44 × 44, лише стрілка). */
-QToolButton#SessionBack {
-    qproperty-arrowColor: #475569;
-    color: #475569;
-    background-color: #F0FDFA;
-    border: 1px solid #0D9488;
-    border-radius: 11px;
-    padding: 0;
-}
-QToolButton#SessionBack:hover, QToolButton#SessionBack:focus {
-    qproperty-arrowColor: #475569;
-    background-color: #F0FDFA;
-    border-color: #0D9488;
-}
-QToolButton#SessionBack:pressed {
-    background-color: #CCFBF1;
-}
-
 QScrollArea#SoapScroll { border: none; background: transparent; }
 QWidget#SoapBody { background: transparent; }
 
@@ -808,3 +790,26 @@ QFrame#PlanItem {
     border: 1px solid #E2E8F0;
     border-radius: 10px;
 }
+
+/* Responsive SOAP workspace tabs. */
+QTabWidget#SessionTabs::pane { border: none; background: transparent; }
+QTabWidget#SessionTabs QTabBar { background: transparent; border: none; }
+QTabWidget#SessionTabs QTabBar::tab {
+    background: #F1F5F9;
+    color: #475569;
+    border: 1px solid #E2E8F0;
+    border-bottom: 2px solid #E2E8F0;
+    padding: 10px 12px;
+    font-weight: 600;
+}
+QTabWidget#SessionTabs QTabBar::tab:selected {
+    background: #F0FDFA;
+    color: #0F766E;
+    border-bottom-color: #0D9488;
+}
+QTabWidget#SessionTabs QTabBar::tab:hover { background: #CCFBF1; }
+QTabWidget#SessionTabs QTabBar::tab:focus { border-color: #0D9488; }
+
+QMenu#SourceMenu { background: #FFFFFF; border: 1px solid #E2E8F0; padding: 4px; }
+QMenu#SourceMenu::item { color: #B91C1C; padding: 6px 14px; }
+QMenu#SourceMenu::item:selected { color: #991B1B; background: #FEE2E2; }

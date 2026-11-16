@@ -68,6 +68,7 @@ class SessionScreen(BaseScreen):
         self._generation += 1
         self._active = True
         self.session_id = params["session_id"]
+        self._requested_source = params.get("source_segment_id")
         self.review_started_at = datetime.now()
         self._data.clear()
         self._errors.clear()
@@ -169,6 +170,10 @@ class SessionScreen(BaseScreen):
         self.view.audio_status.setText(audio_message)
         self.view.audio_status.setVisible(bool(audio_message))
         self.view.set_state("ready")
+        if self._requested_source is not None:
+            segment_id, self._requested_source = self._requested_source, None
+            self.view._show_source(segment_id)
+            self._source_clicked(segment_id)
 
     def _audio_error(self, error: QMediaPlayer.Error, message: str) -> None:
         """Disable waveform navigation if decoding the selected file fails."""
