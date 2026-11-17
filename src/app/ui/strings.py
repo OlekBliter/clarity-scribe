@@ -269,7 +269,7 @@ NEW_PATIENT_HINT_DATE = "Формат дати: дд.мм.рррр"
 NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
 NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
 
-BTN_NEXT = "Далі - додати запис сесії"
+BTN_NEXT = "Далі — додати запис сесії"
 
 ARCHIVE_TITLE = "Архів пацієнтів"
 ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
@@ -292,3 +292,13 @@ ARCHIVE_EMPTY = "Пацієнтів не знайдено"
 SOURCE_REMOVE_HINT = "Права кнопка миші — видалити джерело"
 
 SOURCE_REMOVE = "Видалити"
+
+PROFILE_ADD_SESSION_BUTTON = "+  Додати сесію"
+PROFILE_DELETE = "Видалити"
+PROFILE_DELETE_TITLE = "Видалити пацієнта"
+PROFILE_DELETE_TEXT = (
+    "Видалити пацієнта «{name}» разом з усіма сесіями та аудіозаписами? "
+    "Цю дію неможливо скасувати.")
+PROFILE_DELETE_CONFIRM = "Видалити"
+PROFILE_DELETED_TOAST = "Пацієнта видалено"
+PROFILE_SESSIONS_EMPTY = "Сесій ще немає"
