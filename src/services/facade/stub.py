@@ -542,7 +542,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                     raise FacadeError("Некоректні джерела SOAP")
                 source_ids = list(value)
                 continue
-            if not match or not isinstance(value, str):
+            if not match or not isinstance(value, str) or not value.strip():
                 raise FacadeError("Не вдалося зберегти правки")
             if match.group(2) is not None and int(match.group(2)) >= len(soap["plan"]):
                 raise FacadeError("Не вдалося зберегти правки")

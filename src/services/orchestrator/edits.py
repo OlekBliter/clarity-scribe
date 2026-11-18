@@ -122,7 +122,7 @@ def apply_card_edits(data: dict[str, Any] | MedicalCardData, edits: Iterable[Edi
         if path in BOOL_FIELDS:
             if type(value) is not bool:
                 raise DoctorInputError(SAVE_FAILED)
-        elif not isinstance(value, str):
+        elif value is not None and not isinstance(value, str):
             raise DoctorInputError(SAVE_FAILED)
         elif path == "hypotheses.risk" and value not in RISK_VALUES:
             raise DoctorInputError(SAVE_FAILED)
