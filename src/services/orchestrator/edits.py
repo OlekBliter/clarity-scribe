@@ -148,3 +148,38 @@ def apply_card_edits(data: dict[str, Any] | MedicalCardData, edits: Iterable[Edi
         return MedicalCardData.model_validate(card.model_dump())
     except ValidationError as exc:
         raise DoctorInputError(SAVE_FAILED) from exc
+
+
+def apply_card_evidence(
+    data: dict[str, Any] | MedicalCardData,
+    evidence: dict[str, Any],
+) -> MedicalCardData:
+    """Return card data with selected source references removed or retained."""
+    try:
+        card = MedicalCardData.model_validate(
+            deepcopy(data) if isinstance(data, dict) else data.model_dump()
+        )
+    except ValidationError as exc:
+        raise DoctorInputError(SAVE_FAILED) from exc
+
+    fields = {field.field_id: field for field in card.fields}
+    updates = []
+    for field_id, segment_ids in evidence.items():
+        field = fields.get(field_id)
+        if (
+            field is None
+            or not isinstance(segment_ids, list)
+            or any(
+                type(segment_id) is not int or segment_id not in field.evidence
+                for segment_id in segment_ids
+            )
+            or len(set(segment_ids)) != len(segment_ids)
+        ):
+            raise DoctorInputError(SAVE_FAILED)
+        updates.append((field, segment_ids))
+
+    for field, segment_ids in updates:
+        field.evidence = list(segment_ids)
+        field.edited_by_doctor = True
+
+    return card

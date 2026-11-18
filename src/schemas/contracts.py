@@ -230,6 +230,7 @@ class CardField(Lenient):  # medical_cards.data: S3 fields + doctor-entered fiel
     field_id: str
     status: Literal["filled", "not_discussed", "contradictory", "doctor_input"]
     value: str | bool | None = None
+    evidence: list[int] = Field(default_factory=list)
     edited_by_doctor: bool = False
 
 
@@ -304,6 +305,8 @@ class DoctorCommand(Strict):
     id: str  # patient_id for card, session_id for SOAP
     action: Literal["edit", "approve"]
     edits: list[Edit] = Field(default_factory=list)
+    contacts: dict[str, Any] = Field(default_factory=dict)
+    evidence: dict[str, Any] = Field(default_factory=dict)
     review_started_at: datetime
     at: datetime
 
