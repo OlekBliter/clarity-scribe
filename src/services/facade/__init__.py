@@ -10,6 +10,7 @@ from .facade import (
     FacadeError,
     ProgressCallback,
 )
+from .factory import create_facade
 from .stub import ClarityScribeFacadeStub
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "ClarityScribeFacadeStub",
     "FacadeError",
     "ProgressCallback",
+    "create_facade",
 ]
