@@ -193,6 +193,9 @@ QCheckBox::indicator:checked {
 /* ===================================================================
    6. КНОПКИ (Primary, Secondary, Outline, Danger, Disabled)
    =================================================================== */
+/* Buttons keep keyboard activation without a persistent focus outline. */
+QPushButton, QToolButton { outline: none; }
+
 QPushButton#PrimaryButton {
     background-color: #0D9488;
     color: #FFFFFF;
@@ -224,7 +227,7 @@ QPushButton#SecondaryButton:hover {
     color: #0F172A;
 }
 
-QPushButton#OutlineButton {
+QPushButton#OutlineButton, QPushButton#SessionSave, QPushButton#DeleteText {
     background-color: #FFFFFF;
     color: #0D9488;
     border: 1px solid #0D9488;
@@ -536,7 +539,6 @@ QPushButton#AudioPlay {
 }
 QPushButton#AudioPlay:hover { background-color: #0F766E; }
 QPushButton#AudioPlay:pressed { background-color: #115E59; }
-QPushButton#AudioPlay:focus { border-color: #99F6E4; }
 QPushButton#AudioPlay:disabled,
 QPushButton#AudioPlay:disabled:hover {
     background-color: #E2E8F0;
@@ -586,8 +588,7 @@ QPushButton#AudioMute {
     border-radius: 8px;
     padding: 0;
 }
-QPushButton#AudioMute:hover,
-QPushButton#AudioMute:focus {
+QPushButton#AudioMute:hover {
     color: #0F766E;
     background-color: #F0FDFA;
     border-color: #0D9488;
@@ -677,14 +678,12 @@ QPushButton#SoapCopy {
     font-size: 12px;
     font-weight: 500;
 }
-QPushButton#SoapCopy:hover,
-QPushButton#SoapCopy:focus {
+QPushButton#SoapCopy:hover {
     color: #0F766E;
     background-color: #F0FDFA;
     border-color: #0D9488;
 }
 QPushButton#SoapCopy:pressed { background-color: #CCFBF1; }
-QPushButton#SoapCopy[copied="true"],
 QPushButton#SoapCopy[copied="true"]:hover {
     color: #15803D;
     background-color: #DCFCE7;
@@ -696,7 +695,7 @@ QPushButton#SoapCopy[copied="true"]:hover {
 QWidget#SessionView QPushButton#OutlineButton:pressed { background-color: #CCFBF1; }
 QWidget#SessionView QPushButton#SecondaryButton:pressed { background-color: #CBD5E1; }
 QWidget#SessionView QPushButton#DangerButton:pressed { background-color: #FEE2E2; }
-QWidget#SessionView QPushButton#OutlineButton[copied="true"] {
+QWidget#SessionView QPushButton#OutlineButton[copied="true"]:hover {
     color: #15803D;
     background-color: #DCFCE7;
     border-color: #DCFCE7;
@@ -767,7 +766,7 @@ QToolButton#CardIconAction {
     border-radius: 9px;
     padding: 0;
 }
-QToolButton#CardIconAction:hover, QToolButton#CardIconAction:focus {
+QToolButton#CardIconAction:hover {
     color: #0F766E;
     background: #F0FDFA;
     border-color: #0D9488;
@@ -777,14 +776,14 @@ CardBlock { qproperty-accentColor: #0D9488; }
 
 /* Екран сесії: роздільник колонок невидимий (лише відступ), іконка видалення, блок пункту плану */
 QSplitter::handle { background: transparent; }
-QToolButton#CardIconAction[danger="true"] { color: #B91C1C; }
-QToolButton#CardIconAction[danger="true"]:hover,
-QToolButton#CardIconAction[danger="true"]:focus {
+QPushButton#DeleteText {
     color: #B91C1C;
-    background: #FEF2F2;
-    border-color: #FCA5A5;
+    border-color: #B91C1C;
 }
-QToolButton#CardIconAction[danger="true"]:pressed { background: #FEE2E2; }
+QPushButton#DeleteText:hover {
+    color: #991B1B;
+    background: #FEE2E2;
+}
 QFrame#PlanItem {
     background-color: #F8FAFC;
     border: 1px solid #E2E8F0;
@@ -808,8 +807,13 @@ QTabWidget#SessionTabs QTabBar::tab:selected {
     border-bottom-color: #0D9488;
 }
 QTabWidget#SessionTabs QTabBar::tab:hover { background: #CCFBF1; }
-QTabWidget#SessionTabs QTabBar::tab:focus { border-color: #0D9488; }
 
 QMenu#SourceMenu { background: #FFFFFF; border: 1px solid #E2E8F0; padding: 4px; }
 QMenu#SourceMenu::item { color: #B91C1C; padding: 6px 14px; }
 QMenu#SourceMenu::item:selected { color: #991B1B; background: #FEE2E2; }
+
+QPushButton#SessionSave[variant="clean"] {
+    color: #64748B;
+    border-color: #CBD5E1;
+}
+QPushButton#SessionSave[variant="dirty"]:hover { background-color: #F0FDFA; }
