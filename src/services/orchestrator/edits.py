@@ -37,13 +37,34 @@ RISK_VALUES = frozenset({"low", "moderate", "high"})
 def apply_soap_edits(final: S4Out | dict[str, Any], edits: Iterable[Edit]) -> S4Out:
     """Return a new S4Out with edits applied. The input is not modified.
 
-    Supported paths: ``subjective.text``, ``objective.text``,
-    ``assessment.text`` and ``plan[i].text``.
+    Supported paths: ``subjective.text``, ``subjective.source_segments``,
+    ``objective.text``, ``assessment.text`` and ``plan[i].text``.
     """
     data = final.model_dump(mode="python") if isinstance(final, S4Out) else deepcopy(final)
 
     for edit in edits:
         path, value = edit.path, edit.new_value
+
+        if path == "subjective.source_segments":
+            subjective = data.get("subjective")
+            source_segments = (
+                subjective.get("source_segments")
+                if isinstance(subjective, dict)
+                else None
+            )
+            if (
+                not isinstance(value, list)
+                or not isinstance(source_segments, list)
+                or any(
+                    type(segment_id) is not int or segment_id not in source_segments
+                    for segment_id in value
+                )
+                or len(set(value)) != len(value)
+            ):
+                raise DoctorInputError(SAVE_FAILED)
+            subjective["source_segments"] = value
+            continue
+
         if not isinstance(value, str) or not value.strip():
             raise DoctorInputError(SAVE_FAILED)
 
