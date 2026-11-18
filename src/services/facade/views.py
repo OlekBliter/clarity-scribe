@@ -93,7 +93,8 @@ def build_soap_view(
             "chips": chips
         },
         "assessment": dict(soap_data.get("assessment", {})),
-        "plan": [dict(item) for item in soap_data.get("plan", [])]
+        "plan": [{"text": item["text"], "origin": item["origin"]}
+            for item in soap_data.get("plan", [])],
     }
 
 

@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from functools import wraps
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
 from src.database.connection import Database
 from src.database.repos import (
-    BiomarkersRepo,
+    BiomarkersRepo, 
     MedicalCardsRepo,
     PatientsRepo,
     SessionsRepo,
@@ -31,12 +31,24 @@ from src.database.repos import (
 )
 from src.schemas.contracts import DoctorCommand, Edit
 
-from .facade import ClarityScribeFacade, ProgressCallback
+from .facade import (
+    ClarityScribeFacade, 
+    ProgressCallback,
+    FacadeError,
+)
 from src.database.exceptions import RepositoryError
 from src.services.orchestrator.errors import DoctorInputError, StepFailedError
-from .facade import FacadeError
+from src.systems.longitudinal.exceptions import LongitudinalError
+from src.services.orchestrator.state import patient_badge, session_badge
 from .views import build_soap_view, build_card_view
-from .registry import mmss
+from .registry import (
+    mmss, 
+    patients_subtitle, 
+    fmt_date,
+    sessions_label,
+    trend_direction,
+    dynamics_summary,
+)
 
 if TYPE_CHECKING:
     from src.services.orchestrator import Orchestrator
@@ -75,8 +87,10 @@ def _guard(method: F) -> F:
     * ``FacadeError`` is re-raised unchanged;
     * ``DoctorInputError`` (including ``InvalidTransitionError``) becomes
       ``FacadeError`` with the doctor-facing message;
-    * ``StepFailedError``, ``RepositoryError`` and ``OSError`` are logged with
-      a traceback and become ``FacadeError`` with a generic message;
+    * ``StepFailedError``, ``RepositoryError``, ``OSError`` and
+      ``LongitudinalError`` (S5 dynamics, which the Orchestrator does not wrap)
+      are logged with a traceback and become ``FacadeError`` with a generic
+      message;
     * any other exception is a bug and propagates unchanged.
 
     Args:
@@ -95,7 +109,7 @@ def _guard(method: F) -> F:
             raise
         except DoctorInputError as exc:
             raise FacadeError(str(exc)) from exc
-        except (StepFailedError, RepositoryError, OSError) as exc:
+        except (StepFailedError, RepositoryError, OSError, LongitudinalError) as exc:
             logger.exception(f"Facade call {method.__name__} failed")
             raise FacadeError(_GENERIC_ERROR) from exc
 
@@ -133,49 +147,99 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     @_guard
     def list_patients(self, query: str = "") -> list[dict[str, Any]]:
         """Patient rows for the main list, filtered by name (read-only)."""
-        raise NotImplementedError
+        prefix = query.strip().casefold()
+        with self._db.read() as conn:
+            patients = self._patients.list_with_sessions(conn)
 
+        rows = []
+        for patient in patients:
+            name = patient["preferred_name"] if patient["preferred_name"] is not None else "Без імені"
+            if prefix and prefix not in name.casefold():
+                continue
+            rows.append({
+                "patient_id": patient["patient_id"],
+                "name": name,
+                "subtitle": patients_subtitle(patient),
+                "badge": patient_badge(patient["sessions"]),
+            })
+        return sorted(rows, key=lambda x: x["name"].casefold())
+
+        
     @_guard
     def create_patient(self, contacts: dict[str, Any]) -> str:
         """Create a patient via the Orchestrator and return the new id."""
-        raise NotImplementedError
+        return self._o.create_patient(contacts)
 
     @_guard
     def delete_patient(self, patient_id: str) -> None:
         """Delete a patient with all sessions via the Orchestrator."""
-        raise NotImplementedError
+        return self._o.delete_patient(patient_id)
 
     @_guard
     def get_patient_profile(self, patient_id: str) -> dict[str, Any]:
         """Profile screen: contacts line and the session list (read-only)."""
-        raise NotImplementedError
+        with self._db.read() as conn:
+            patient = self._patients.get(conn, patient_id)
+            sessions = self._sessions.list_by_patient(conn, patient_id)
+            card = self._cards.find(conn, patient_id)
+        parts = [patient["phone"], patient["email"]]
+        if patient["preferred_channel"]:
+            parts.append(f"зручний канал: {patient['preferred_channel']}")
+
+        rows = []
+        for s in sessions:
+            rows.append({
+                "session_id": s["session_id"],
+                "number": s["session_number"],
+                "date": fmt_date(date.fromisoformat(s["session_date"])),
+                "subtitle": "SOAP-нотатка • медкартка" if s["session_number"] == 1 else "SOAP-нотатка",
+                "badge": session_badge(s["status"], s["failed_step"]),
+                "is_ready": s["status"] in ("drafted", "approved"),
+            })
+
+        return {
+            "patient_id": patient_id,
+            "name": patient["preferred_name"] or "Без імені",
+            "contacts_line": " • ".join(p for p in parts if p),
+            "has_card": card is not None and card["status"] != "generated",
+            "has_dynamics": sum(s["status"] == "approved" for s in sessions) >= 2,
+            "sessions": rows,
+        }
 
     # ---------------------------------------------------------------- processing
 
     @_guard
     def next_session_number(self, patient_id: str) -> int:
         """Number the next session of this patient will get."""
-        raise NotImplementedError
-
+        return self._o.next_session_number(patient_id)
+    
     @_guard
     def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
         """Register a new recording via the Orchestrator and return its id."""
-        raise NotImplementedError
+        return self._o.register_session(patient_id, wav_path, language, session_date)
 
     @_guard
     def process_session(self, session_id: str, on_progress: ProgressCallback | None = None) -> None:
         """Run the pipeline steps until the session needs the doctor."""
-        raise NotImplementedError
+        callback = None
+        if on_progress is not None:
+            callback = lambda step, state: on_progress(step.value, state)
+        self._o.run_until_blocked(session_id, callback)
 
     @_guard
     def get_processing_state(self, session_id: str) -> dict[str, Any]:
         """Stage states for the progress screen."""
-        raise NotImplementedError
+        state = self._o.get_processing_state(session_id)
+        return {
+            "stages": state["stages"],
+            "error": _GENERIC_ERROR if state["failed_step"] else None,
+            "finished": state["finished"],
+        }
 
     @_guard
     def delete_session(self, session_id: str) -> None:
         """Delete one session via the Orchestrator."""
-        raise NotImplementedError
+        return self._o.delete_session(session_id)
 
     # ---------------------------------------------------------------------- SOAP
 
@@ -301,4 +365,30 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     @_guard
     def get_dynamics(self, patient_id: str) -> dict[str, Any]:
         """Biomarker trends across approved sessions of a patient."""
-        raise NotImplementedError
+        result = self._o.get_dynamics(patient_id)
+        if result is None:
+            with self._db.read() as conn:
+                approved = [s["session_number"]
+                            for s in self._sessions.list_by_patient(conn, patient_id)
+                            if s["status"] == "approved"]
+            return {"available": False, "sessions_label": sessions_label(approved),
+                    "trends": [], "summary_text": ""}
+
+        trends = []
+        numbers: set[int] = set()
+        for trend in result.trends:
+            stats = trend.statistics
+            numbers.update(p.session_number for p in trend.points)
+            trends.append({
+                "metric": trend.metric,
+                "values": [{"session_number": p.session_number, "value": p.value}
+                        for p in trend.points],
+                "slope": stats.slope_per_session,
+                "direction": trend_direction(stats.slope_per_session, stats.baseline_value),
+            })
+        return {
+            "available": True,
+            "sessions_label": sessions_label(sorted(numbers)),
+            "trends": trends,
+            "summary_text": dynamics_summary(trends),
+        }

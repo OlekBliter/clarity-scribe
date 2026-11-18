@@ -9,6 +9,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+_METRIC_TITLES = {
+    "pause_ratio": "тривалість пауз",
+    "speech_rate_syllables_per_sec": "темп мовлення",
+    "f0_variability_sd": "варіативність F0",
+    "psychomotor_retardation_index": "індекс психомоторної загальмованості",
+}
+_DIRECTION_PHRASES = {"up": "зростає", "down": "зменшується", "stable": "стабільна"}
 
 def fmt_date(value: date) -> str:
     """Format a date the way the UI shows it: ``02.10.2026``."""
@@ -64,3 +71,29 @@ def patients_subtitle(patient: dict[str, Any]) -> str:
         return "Немає сесій"
     last = date.fromisoformat(patient["last_session_date"])
     return f"{count} {sessions_word(count)} • остання {fmt_date(last)}"
+
+def sessions_label(numbers: list[int]) -> str:
+    """``1–5`` for a range, ``3`` for a single session, ``""`` for none."""
+    if not numbers:
+        return ""
+    first, last = min(numbers), max(numbers)
+    return str(first) if first == last else f"{first}–{last}"
+
+
+def trend_direction(slope: float | None, baseline: float) -> str:
+    """``stable`` if |slope| < 5% of the baseline (0.05 when the baseline is 0)."""
+    if slope is None:
+        return "stable"
+    threshold = 0.05 * abs(baseline) if baseline != 0 else 0.05
+    if abs(slope) < threshold:
+        return "stable"
+    return "up" if slope > 0 else "down"
+
+
+def dynamics_summary(trends: list[dict[str, Any]]) -> str:
+    """Template sentence built from the trend directions."""
+    parts = [
+        f"{_METRIC_TITLES.get(t['metric'], t['metric'])} — {_DIRECTION_PHRASES[t['direction']]}"
+        for t in trends
+    ]
+    return "Порівняно з першим візитом: " + "; ".join(parts) + "."
