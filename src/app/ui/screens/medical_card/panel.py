@@ -14,8 +14,7 @@ from src.app.ui.qt_helpers import fit_combo_popup
 from src.app.ui.widgets.source_chip import SourceChip
 from src.app.ui.widgets.flow_layout import FlowLayout
 
-BOOL_FIELDS = {"history.on_medication", "safety.suicidal_past",
-               "safety.suicidal_now", "contacts.emergency_consent"}
+from src.schemas.contracts import BOOL_FIELDS
 
 
 def label(text: str, name: str = "Subtitle") -> QLabel:
@@ -74,15 +73,13 @@ class CardPanel(QFrame):
             key, value = field["field_id"], field["value"]
             column.addWidget(label(field["title"], "CardTitle"))
             if editable:
-                if key in BOOL_FIELDS or isinstance(value, bool) or key == "hypotheses.risk":
+                if key in BOOL_FIELDS or key == "contacts.emergency_consent" or key == "hypotheses.risk":
                     editor = QComboBox()
-                    editor.addItem(S.MEDCARD_NONE, None)
+                    editor.setPlaceholderText(S.MEDCARD_NONE)
                     options = S.MEDCARD_RISKS if key == "hypotheses.risk" else {True: S.MEDCARD_YES, False: S.MEDCARD_NO}
                     for code, caption in options.items():
                         editor.addItem(caption, code)
-                    if value is not None and editor.findData(value) < 0:
-                        editor.addItem(str(value), value)
-                    editor.setCurrentIndex(max(0, editor.findData(value)))
+                    editor.setCurrentIndex(editor.findData(value) if value is not None else -1)
                     fit_combo_popup(editor)
                 else:
                     editor = QPlainTextEdit()
@@ -168,10 +165,14 @@ class CardPanel(QFrame):
             if editor is None:
                 continue
             if isinstance(editor, QComboBox):
+                if editor.currentIndex() < 0:
+                    continue
                 value = editor.currentData()
             else:
                 value = editor.toPlainText()
-                if original is None and value == "":
+                if value == (original or ""):
+                    continue
+                if not value.strip():
                     value = None
             if value != original:
                 changes[key] = value

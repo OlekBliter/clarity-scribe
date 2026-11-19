@@ -1,15 +1,18 @@
-"""Initial-visit medical card screen. Edit persistence will be added in A4."""
+"""Initial-visit medical card screen. Review and approve a medical card."""
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime
+from functools import partial
 from copy import deepcopy
 from PySide6.QtCore import Qt, QRect, QDate
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QMessageBox, QHBoxLayout, QLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 from src.app.ui import metrics, strings as S
 from src.app.ui.medcard_layout import MEDCARD_LAYOUT
 from src.app.ui.widgets.action_icon import ActionIcon
+from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import Badge, badge_for
@@ -26,6 +29,8 @@ class MedicalCardScreen(BaseScreen):
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._request_id = 0
+        self._busy = False
+        self._original = None
         self.editors = {}
         self._drafts = {}
         self._source_edits = {}
@@ -63,12 +68,13 @@ class MedicalCardScreen(BaseScreen):
         root.addWidget(self._scroll, 1)
         footer = QHBoxLayout()
         footer.addStretch()
-        for caption, factory in ((S.MEDCARD_SAVE, outline_button),
-                                 (S.MEDCARD_APPROVE, primary_button)):
-            button = factory(caption)
-            button.setEnabled(False)
-            button.setToolTip(S.MEDCARD_ACTIONS_HINT)
-            footer.addWidget(button)
+        self.save = outline_button(S.MEDCARD_SAVE)
+        self.save.setObjectName("SessionSave")
+        self.approve = primary_button(S.MEDCARD_APPROVE)
+        self.save.clicked.connect(lambda: self._submit(False))
+        self.approve.clicked.connect(lambda: self._submit(True))
+        footer.addWidget(self.save)
+        footer.addWidget(self.approve)
         root.addLayout(footer)
 
     def on_open(self, **params: Any) -> None:
@@ -76,6 +82,12 @@ class MedicalCardScreen(BaseScreen):
             panel.discard()
         self._drafts.clear()
         self._source_edits.clear()
+        self.review_started_at = datetime.now()
+        self._busy = False
+        self._original = None
+        self.save.hide()
+        self.approve.hide()
+        self._scroll.setEnabled(True)
         self._request_id += 1
         request_id = self._request_id
         patient_id = params["patient_id"]
@@ -101,9 +113,10 @@ class MedicalCardScreen(BaseScreen):
     def _render_current(self, data: dict, request_id: int) -> None:
         if not self._current(request_id):
             return
+        self._original = data
         self._data = deepcopy(data)
         data = self._data
-        draft = self._drafts.get(self._patient_id, {})
+        draft = self._drafts
         if data["editable"]:
             for field in data["fields"]:
                 if field["field_id"] in self._source_edits:
@@ -183,6 +196,7 @@ class MedicalCardScreen(BaseScreen):
         self._scroll.setWidget(content)
         self._scroll.verticalScrollBar().setValue(0)
         self._scroll.show()
+        self._update_actions()
 
     def _failed(self, exc: BaseException, patient_id: str, request_id: int) -> None:
         if not self._current(request_id):
@@ -220,11 +234,91 @@ class MedicalCardScreen(BaseScreen):
     def _apply_changes(self, changes: dict, source_changes: dict) -> None:
         if not changes and not source_changes:
             return
-        self._drafts.setdefault(self._patient_id, {}).update(changes)
+        originals = {f["field_id"]: f["value"] for f in self._original["fields"]}
+        originals.update({"contacts." + k: v for k, v in self._original["contacts"].items()})
+        for key, value in changes.items():
+            if value == originals[key]:
+                self._drafts.pop(key, None)
+            else:
+                self._drafts[key] = value
         self._source_edits.update(source_changes)
         position = self._scroll.verticalScrollBar().value()
-        self._render_current(self._data, self._request_id)
+        self._render_current(self._original, self._request_id)
         self._scroll.verticalScrollBar().setValue(position)
+
+    def _update_actions(self):
+        editable = bool(self._data and self._data["editable"])
+        self.save.setVisible(editable)
+        self.approve.setVisible(editable)
+        self.save.setEnabled(not self._busy)
+        self.approve.setEnabled(not self._busy)
+        self._scroll.setEnabled(not self._busy)
+        set_variant(self.save, "dirty" if self._drafts or self._source_edits else "clean")
+
+    def _submit(self, approve: bool):
+        if self._busy or self._panels or not self._data or not self._data["editable"]:
+            return
+        toast = self.window().toast.show_message
+        if not approve and not (self._drafts or self._source_edits):
+            toast(S.MEDCARD_NO_EDITS)
+            return
+        edits = [{"path": key, "new_value": value} for key, value in self._drafts.items()
+                 if not key.startswith("contacts.")]
+        contacts = {k.split(".", 1)[1]: v for k, v in self._drafts.items() if k.startswith("contacts.")}
+        evidence = {key: [s["segment_id"] for s in sources] for key, sources in self._source_edits.items()}
+        action = self.facade.approve_card if approve else self.facade.save_card
+        if contacts or evidence:
+            if not getattr(self.facade, "supports_card_details", False):
+                toast(S.MEDCARD_DETAILS_UNSUPPORTED)
+                return
+            action = partial(action, contacts=contacts, evidence=evidence)
+        if approve:
+            box = QMessageBox(self)
+            box.setWindowTitle(S.MEDCARD_APPROVE)
+            box.setText(S.MEDCARD_CONFIRM_APPROVE)
+            yes = box.addButton(S.MEDCARD_APPROVE, QMessageBox.ButtonRole.AcceptRole)
+            cancel = box.addButton(S.CANCEL, QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(cancel)
+            box.setEscapeButton(cancel)
+            box.exec()
+            if box.clickedButton() is not yes:
+                return
+        generation = self._request_id
+        self._busy = True
+        self._update_actions()
+
+        def failed(error):
+            if self._current(generation):
+                self._busy = False
+                self._update_actions()
+                self._default_error(error)
+
+        def saved(_result):
+            if not self._current(generation):
+                return
+            self._drafts.clear()
+            self._source_edits.clear()
+            if approve:
+                self.save.hide()
+                self.approve.hide()
+                self._scroll.hide()
+                self._status.setText(S.MEDCARD_LOADING)
+                self._status.show()
+                self.call(self.facade.get_card, self._patient_id, on_success=reloaded,
+                          on_error=lambda err: self._failed(err, self._patient_id, generation))
+            else:
+                self._original = deepcopy(self._data)
+                self._busy = False
+                self._update_actions()
+                toast(S.MEDCARD_SAVED)
+
+        def reloaded(card):
+            if self._current(generation):
+                self._busy = False
+                self._render_current(card, generation)
+
+        self.call(action, self._patient_id, edits, self.review_started_at,
+                  on_success=saved, on_error=failed)
 
     def _remove_source(self, source: dict, field_id: str) -> None:
         if not self._data or not self._data["editable"]:
