@@ -80,6 +80,7 @@ SESSION_SAVE = "Зберегти правки"
 SESSION_APPROVE = "Підтвердити"
 SESSION_DELETE = "Видалити сесію"
 SESSION_EXPORT = "Експорт нотатки"
+SESSION_EMPTY_TEXT = "Заповніть виділене поле SOAP перед збереженням або підтвердженням."
 SESSION_NO_EDITS = "Спочатку внесіть правки."
 SOURCE_CONFIRM_REMOVE = "Прибрати таймкод {time} з цього поля?"
 SESSION_SAVED = "Збережено"
@@ -147,7 +148,6 @@ MEDCARD_SOON = 'Скоро'
 MEDCARD_CONFIRM_APPROVE = "Підтвердити медкартку? Після цього вона буде доступна лише для читання."
 MEDCARD_SAVED = "Збережено"
 MEDCARD_NO_EDITS = "Спочатку внесіть правки."
-MEDCARD_DETAILS_UNSUPPORTED = "Ця версія фасаду ще не підтримує збереження контактів або таймкодів."
 MEDCARD_SAVE = 'Зберегти правки'
 MEDCARD_APPROVE = 'Підтвердити'
 MEDCARD_ACTIONS_HINT = 'Збереження та підтвердження будуть доступні в A4.'
@@ -210,6 +210,7 @@ MEDCARD_FIELDS = {'safety.suicidal_past': 'Суїцидальні думки / �
  'agreements.frequency': 'Частота',
  'agreements.cost': 'Вартість',
  'agreements.initial_goals': 'Цілі на початковий період'}
+MEDCARD_CONTACT_REQUIRED = "Поле «{field}» не можна залишити порожнім."
 MEDCARD_CONTACTS = {'preferred_name': 'Ім’я',
  'birth_date': 'Дата народження',
  'phone': 'Телефон',

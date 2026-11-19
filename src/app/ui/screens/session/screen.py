@@ -253,9 +253,19 @@ class SessionScreen(BaseScreen):
     def _action_error(self, error: BaseException) -> None:
         self._toast(str(error) or S.ERROR_GENERIC)
 
+    def _valid_edits(self, edits) -> bool:
+        for edit in edits:
+            if edit["path"].endswith(".text") and not edit["new_value"].strip():
+                self.view.soap.editors[edit["path"]].setFocus()
+                self._toast(S.SESSION_EMPTY_TEXT)
+                return False
+        return True
+
     def _save(self) -> None:
         edits = self._edits()
         if self._busy:
+            return
+        if not self._valid_edits(edits):
             return
         if not edits:
             self._toast(S.SESSION_NO_EDITS)
@@ -269,7 +279,10 @@ class SessionScreen(BaseScreen):
                       self.review_started_at, success=saved)
 
     def _approve(self) -> None:
-        if self._busy or not self._confirm(S.SESSION_APPROVE, S.SESSION_CONFIRM_APPROVE):
+        edits = self._edits()
+        if self._busy or not self._valid_edits(edits):
+            return
+        if not self._confirm(S.SESSION_APPROVE, S.SESSION_CONFIRM_APPROVE):
             return
         # Freeze the submitted note through approval and the authoritative reread.
         self.view.soap.setEnabled(False)
@@ -282,7 +295,7 @@ class SessionScreen(BaseScreen):
             self._request(self.facade.get_soap, self.session_id, success=self._render_soap,
                           failure=self._refresh_failed)
 
-        self._request(self.facade.approve_soap, self.session_id, self._edits(),
+        self._request(self.facade.approve_soap, self.session_id, edits,
                       self.review_started_at, success=approved, failure=rejected)
 
     def _refresh_failed(self, error: BaseException) -> None:

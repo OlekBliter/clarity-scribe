@@ -517,7 +517,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             approved = soap["status"] == "approved"
             return {
                 "session_id": session_id, "patient_id": session["patient_id"],
-                "patient_name": self._patients[session["patient_id"]]["preferred_name"],
+                "patient_name": self._patients[session["patient_id"]]["preferred_name"] or "Без імені",
                 "number": session["number"], "date": _fmt_date(session["date"]),
                 "status": soap["status"], "badge": "approved" if approved else "review",
                 "editable": not approved,
@@ -635,7 +635,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                 for field_id, data in card["fields"].items()
             ]
             return {
-                "patient_id": patient_id, "patient_name": patient["preferred_name"],
+                "patient_id": patient_id, "patient_name": patient["preferred_name"] or "Без імені",
                 "date": _fmt_date(first["date"]), "status": card["status"],
                 "badge": "approved" if approved else "review", "editable": not approved,
                 "contacts": {
@@ -663,18 +663,26 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                 valid = value is None or isinstance(value, str)
             if not valid:
                 raise FacadeError("Не вдалося зберегти правки")
+            if field_id == "hypotheses.risk" and value not in ("low", "moderate", "high"):
+                raise FacadeError("Некоректна оцінка ризику")
+            if field_id not in BOOL_FIELDS and (value is None or not value.strip()):
+                value = "-"
             checked.append((field_id, value))
         for field_id, value in checked:
-            card["fields"][field_id]["value"] = value
+            field = card["fields"][field_id]
+            if field["state"] != "attention":
+                field["state"] = "normal"
+            field["contradiction_text"] = None
+            field["value"] = value
             card["edited"].add(field_id)
-
-    supports_card_details = True
 
     def _apply_card_review(self, patient_id, card, edits, contacts, evidence):
         # Validate related updates before changing any part of the draft.
         for key, value in contacts.items():
             if key not in _CONTACT_KEYS:
                 raise FacadeError("Невідоме контактне поле")
+            if not key.startswith("emergency_") and (not isinstance(value, str) or not value.strip()):
+                raise FacadeError("Основне контактне поле не можна залишити порожнім.")
             if key == "emergency_consent":
                 valid = isinstance(value, bool)
             else:

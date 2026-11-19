@@ -115,6 +115,8 @@ def _validate_card_contacts(contacts: dict[str, Any]) -> None:
     for key, value in contacts.items():
         if key not in CARD_CONTACT_FIELDS:
             raise DoctorInputError("Невідоме контактне поле.")
+        if not key.startswith("emergency_") and (not isinstance(value, str) or not value.strip()):
+            raise DoctorInputError("Основне контактне поле не можна залишити порожнім.")
         if key == "emergency_consent":
             valid = type(value) is bool
         else:

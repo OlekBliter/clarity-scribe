@@ -78,7 +78,7 @@ def build_soap_view(
     return {
         "session_id": session["session_id"],
         "patient_id": session["patient_id"],
-        "patient_name": patient["preferred_name"],
+        "patient_name": patient["preferred_name"] or "Без імені",
         "number": session["session_number"],
         "date": fmt_date(dt),
         "status": soap["status"],
@@ -122,9 +122,9 @@ def build_card_view(
         # Determine the state (normal, from_conversation, attention, contradictory)
         if dr_field.get("attention"):
             state = "attention"
-        elif d_field.get("status") == "contradictory" or dr_field.get("status") == "contradictory":
+        elif d_field.get("status", dr_field.get("status")) == "contradictory":
             state = "contradictory"
-        elif d_field.get("status") == "filled" or dr_field.get("status") == "filled":
+        elif d_field.get("status", dr_field.get("status")) == "filled" and not d_field.get("edited_by_doctor"):
             state = "from_conversation"
         else:
             state = "normal"
@@ -133,7 +133,8 @@ def build_card_view(
             "field_id": field_id,
             "state": state,
             "value": d_field.get("value"),
-            "contradiction_text": dr_field.get("contradiction_text"),
+            "contradiction_text": dr_field.get("contradiction_text")
+            if d_field.get("status", dr_field.get("status")) == "contradictory" else None,
             "sources": build_sources(
                 d_field.get("evidence", dr_field.get("evidence", [])), segments
             ),
@@ -145,7 +146,7 @@ def build_card_view(
 
     return {
         "patient_id": patient["patient_id"],
-        "patient_name": patient["preferred_name"],
+        "patient_name": patient["preferred_name"] or "Без імені",
         "date": fmt_date(dt),
         "status": card["status"],
         "badge": "approved" if card["status"] == "approved" else "review",
