@@ -10,6 +10,7 @@ from PySide6.QtGui import (QAbstractTextDocumentLayout, QColor, QFont, QImage,
                           QPainter, QPalette, QPageSize, QPdfWriter, QTextDocument)
 from PySide6.QtWidgets import QApplication, QFileDialog
 from . import strings as S
+from .medcard_layout import MEDCARD_LAYOUT
 
 
 def ask_save_path(parent, default_name) -> str | None:
@@ -90,33 +91,87 @@ def export_soap(data: dict, path: str):
     _write_pdf(_soap_html(data), path, S.PDF_SOAP_TITLE)
 
 
+def save_screen_pdf(parent, data, filename, exporter):
+    path = ask_save_path(parent, filename)
+    if not path:
+        return
+    try:
+        exporter(data, path)
+    except OSError as exc:
+        message = S.PDF_WRITE_ERROR.format(error=exc)
+    except Exception as exc:
+        message = S.PDF_EXPORT_ERROR.format(error=exc)
+    else:
+        message = S.SESSION_SAVED
+    parent.window().toast.show_message(message)
+
+
+def _card_field(field):
+    key = field["field_id"]
+    value = field.get("value")
+    if key == "hypotheses.risk":
+        value = S.MEDCARD_RISKS.get(value, value)
+    label = _text(S.MEDCARD_FIELDS.get(key, key))
+    badges = {"attention": (S.MEDCARD_ATTENTION, "#B91C1C"),
+              "contradictory": (S.MEDCARD_CONTRADICTORY, "#92400E")}
+    if field.get("state") in badges:
+        caption, color = badges[field["state"]]
+        label += f' <b style="color:{color}">{caption}</b>'
+    html = f"<p><b>{label}</b><br>{_text(value)}</p>"
+    if field.get("contradiction_text"):
+        html += _p(field["contradiction_text"])
+    return html + _sources(field.get("sources", []))
+
+
 def export_card(data: dict, path: str):
-    parts = [_header(data, S.PDF_CARD_TITLE), '<h2>'+S.PDF_CONTACTS+'</h2>']
-    parts.extend(_p(S.MEDCARD_CONTACTS.get(k, k)+': '+str(v if v is not None else S.PDF_MISSING))
-                 for k, v in data.get('contacts', {}).items())
-    for field in data.get('fields', []):
-        key = field.get('field_id', '')
-        parts.extend(('<h2>'+_text(S.MEDCARD_FIELDS.get(key, key))+'</h2>', _p(S.MEDCARD_RISKS.get(field.get("value"), field.get("value")) if key == "hypotheses.risk" else field.get("value")),
-                      _sources(field.get('sources', []))))
-        if field.get('contradiction_text'):
-            parts.append(_p(field['contradiction_text']))
-    _write_pdf(''.join(parts), path, S.PDF_CARD_TITLE)
+    fields = {field["field_id"]: field for field in data.get("fields", [])}
+    columns = []
+    for column, blocks in MEDCARD_LAYOUT.items():
+        content = ["<h2>" + S.MEDCARD_COLUMNS[column] + "</h2>"]
+        for block, keys in blocks.items():
+            content.append("<h3>" + S.MEDCARD_BLOCKS[block] + "</h3>")
+            if block == "contacts":
+                for key, value in data.get("contacts", {}).items():
+                    content.append(f"<p><b>{_text(S.MEDCARD_CONTACTS.get(key, key))}</b><br>{_text(value)}</p>")
+            else:
+                content.extend(_card_field(fields.pop(key)) for key in keys if key in fields)
+        columns.append('<td width="50%" valign="top">' + "".join(content) + "</td>")
+    html = _header(dict(data, number=1), S.PDF_CARD_TITLE)
+    html += '<table width="100%" cellpadding="6"><tr>' + "".join(columns) + "</tr></table>"
+    html += "".join(_card_field(field) for field in fields.values())
+    _write_pdf(html, path, S.PDF_CARD_TITLE)
 
 
 def export_dynamics(data: dict, path: str):
-    parts = ['<h1>'+S.PDF_DYNAMICS_TITLE+'</h1>']
-    if data.get('patient_name'):
-        parts.append(_p(data['patient_name']))
-    if not data.get('available'):
-        parts.append(_p(S.DYNAMICS_EMPTY))
+    parts = ['<p><img src="export-logo" width="135" height="33"></p><h1>' + S.PDF_DYNAMICS_TITLE + '</h1>']
+    if data.get("available"):
+        parts.append(_table((S.PDF_PATIENT, S.PDF_SESSION), [(data.get("patient_name"), data["sessions_label"])]))
+        parts.append("<h2>" + S.PDF_SESSION_METRICS + "</h2>")
+        trends = data["trends"]
+        sessions = sorted({point["session_number"] for trend in trends for point in trend["values"]})
+        for offset in range(0, len(sessions), 4):
+            numbers = sessions[offset:offset+4]
+            rows = []
+            for trend in trends:
+                metric = trend["metric"]
+                percent = metric == "pause_ratio"
+                factor = 100 if percent else 1
+                unit = "%" if percent else S.DYNAMICS_SLOPE_UNITS.get(metric, "")
+                name = S.DYNAMICS_METRIC_NAMES.get(metric, metric)
+                values = {v["session_number"]: v["value"] for v in trend["values"]}
+                direction = S.DYNAMICS_DIRECTIONS.get(trend["direction"], trend["direction"])
+                slope = trend.get("slope")
+                if slope is not None:
+                    direction += "\n" + S.DYNAMICS_SLOPE_WITH_UNIT.format(value=slope*factor, unit=S.DYNAMICS_SLOPE_UNITS.get(metric, ""))
+                row = [f"{name} {unit}".strip()]
+                for n in numbers:
+                    row.append(f"{values[n]*factor:.4g}" if values.get(n) is not None else S.PDF_MISSING)
+                rows.append([*row, direction])
+            parts.append(_table([S.PDF_METRIC_HEADERS[0], *(f"№{n}" for n in numbers), S.PDF_METRIC_HEADERS[-1]], rows))
+        parts.extend(("<h2>" + S.PDF_TREND_SUMMARY + "</h2>", _p(data.get("summary_text"))))
     else:
-        parts.extend((_p(S.DYNAMICS_SESSIONS.format(sessions=data.get('sessions_label', ''))), _p(data.get('summary_text'))))
-        for trend in data.get('trends', []):
-            metric = trend.get('metric', '')
-            parts.extend(('<h2>'+_text(S.DYNAMICS_METRIC_NAMES.get(metric, S.METRIC_TITLES.get(metric, metric)))+'</h2>',
-                          _p(_direction(trend)), _p(S.DYNAMICS_SLOPE.format(value=trend['slope'])) if trend.get('slope') is not None else '',
-                          _table((S.PDF_SESSION, S.PDF_VALUE), [(v.get('session_number'), v.get('value')) for v in trend.get('values', [])])))
-    _write_pdf(''.join(parts), path, S.PDF_DYNAMICS_TITLE)
+        parts.append(_p(S.DYNAMICS_EMPTY))
+    _write_pdf("".join(parts), path, S.PDF_DYNAMICS_TITLE)
 
 
 def _write_pdf(html: str, path: str, title: str) -> None:

@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QMessageBox, QHBoxLayout, QLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 from src.app.ui import metrics, strings as S
+from src.app.ui.export_pdf import export_card, save_screen_pdf
+from src.services.facade.facade import FacadeError
 from src.app.ui.medcard_layout import MEDCARD_LAYOUT
 from src.app.ui.widgets.action_icon import ActionIcon
 from src.app.ui.qt_helpers import set_variant
@@ -47,9 +49,10 @@ class MedicalCardScreen(BaseScreen):
         self._crumb.setTextFormat(Qt.TextFormat.PlainText)
         self._crumb.setWordWrap(True)
         top.addWidget(self._crumb, 1)
-        export = outline_button(S.MEDCARD_EXPORT)
-        export.clicked.connect(lambda: self.window().toast.show_message(S.MEDCARD_SOON))
-        top.addWidget(export)
+        self.export = outline_button(S.MEDCARD_EXPORT)
+        self.export.setEnabled(False)
+        self.export.clicked.connect(self._export)
+        top.addWidget(self.export)
         root.addLayout(top)
         heading = QHBoxLayout()
         self._title = text_label(S.MEDCARD_BREADCRUMB, "ScreenTitle")
@@ -80,6 +83,8 @@ class MedicalCardScreen(BaseScreen):
     def on_open(self, **params: Any) -> None:
         for panel in list(reversed(self._panels)):
             panel.discard()
+        self.export.setEnabled(False)
+        self._data = None
         self._drafts.clear()
         self._source_edits.clear()
         self.review_started_at = datetime.now()
@@ -205,6 +210,11 @@ class MedicalCardScreen(BaseScreen):
         if not self._current(request_id):
             return
         self._skeleton.hide()
+        self.export.setEnabled(False)
+        self._status.show()
+        if isinstance(exc, FacadeError) and str(exc).rstrip(".") in (S.MEDCARD_EMPTY, "Медкартки ще немає"):
+            self._status.setText(S.MEDCARD_EMPTY)
+            return
         self._status.setText(S.MEDCARD_ERROR)
         self._default_error(exc)
         # Check card presence through the contract instead of matching error text.
@@ -249,7 +259,13 @@ class MedicalCardScreen(BaseScreen):
         self._render_current(self._original, self._request_id)
         self._scroll.verticalScrollBar().setValue(position)
 
+    def _export(self):
+        if self._data and not self._busy:
+            name = S.PDF_CARD_NAME.format(name=self._data.get("patient_name") or S.NO_NAME)
+            save_screen_pdf(self, self._data, name, export_card)
+
     def _update_actions(self):
+        self.export.setEnabled(bool(self._data) and not self._busy)
         editable = bool(self._data and self._data["editable"])
         self.save.setVisible(editable)
         self.approve.setVisible(editable)
