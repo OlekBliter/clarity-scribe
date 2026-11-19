@@ -119,6 +119,7 @@ _SOAP_SEED = {
         ("Розглянути щоденний самоконтроль настрою та сну", "recommended"),
     ),
 }
+_LLM_PROVIDERS = frozenset({"gemini", "groq"})
 _SOAP_PATH_RE = re.compile(r"^(?:(subjective|objective|assessment)\.text|plan\[(\d+)\]\.text)$")
 
 
@@ -753,3 +754,26 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         phrases = {"up": "зростає", "down": "зменшується", "stable": "стабільна"}
         parts = [f"{_METRIC_TITLES.get(t['metric'], t['metric'])} — {phrases[t['direction']]}" for t in trends]
         return "Порівняно з першим візитом: " + "; ".join(parts) + "."
+
+    # ----------------------------------------------------------------- llm`s connection
+
+    def test_llm_connection(self, provider: str, api_key: str) -> dict[str, Any]:
+        """Pretend to check the LLM key. Makes no network requests.
+
+        An empty key gives "Введіть API-ключ", a key starting with ``"bad"``
+        gives "Невірний API-ключ", any other key succeeds after about 0.5 s.
+
+        Returns:
+            ``{"ok": bool, "message": str, "latency_ms": int | None}``
+        """
+        if (provider or "").strip().lower() not in _LLM_PROVIDERS:
+            return {"ok": False, "message": "Невідомий провайдер LLM", "latency_ms": None}
+        key = (api_key or "").strip()
+        if not key:
+            return {"ok": False, "message": "Введіть API-ключ", "latency_ms": None}
+        if key.startswith("bad"):
+            return {"ok": False, "message": "Невірний API-ключ", "latency_ms": None}
+        started = time.perf_counter()
+        time.sleep(0.5)
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        return {"ok": True, "message": "З'єднання встановлено", "latency_ms": latency_ms}

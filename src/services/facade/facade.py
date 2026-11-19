@@ -302,3 +302,27 @@ class ClarityScribeFacade(ABC):
                            "direction": "up" | "down" | "stable"}],
                "summary_text": str}``
         """
+
+    # ----------------------------------------------------------------- llm`s connection
+
+    @abstractmethod
+    def test_llm_connection(self, provider: str, api_key: str) -> dict[str, Any]:
+        """Check that the LLM provider accepts the key. Sends no patient data.
+
+        Synchronous, timeout about 10 s (the UI calls it from a background
+        thread). Saves nothing; the key is never logged or returned.
+
+        Args:
+            provider: Provider id: ``"gemini"`` or ``"groq"`` (case-insensitive).
+            api_key: Key from the settings form. If empty, the saved key is
+                checked; without a saved key the result is ``ok=False``.
+
+        Returns:
+            ``{"ok": True, "message": "З'єднання встановлено", "latency_ms": 420}``
+            ``{"ok": False, "message": "Невірний API-ключ", "latency_ms": None}``
+            Expected failures (wrong key, no internet, rate limit, timeout) are
+            ``ok=False`` with a Ukrainian message, not exceptions.
+
+        Raises:
+            FacadeError: Unexpected failure ("Сталася помилка. Спробуйте ще раз").
+        """
