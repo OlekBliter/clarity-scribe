@@ -304,6 +304,42 @@ ARCHIVE_EMPTY = "Пацієнтів не знайдено"
 SOURCE_REMOVE_HINT = "Права кнопка миші — видалити джерело"
 
 SOURCE_REMOVE = "Видалити"
+# Налаштування застосунку
+SETTINGS_TITLE = "Налаштування застосунку"
+
+SETTINGS_CARD_AUDIO = "Аудіо та канали"
+SETTINGS_CHANNELS_LABEL = "Канали запису (за замовчуванням)"
+SETTINGS_CHANNEL_FMT = "Канал {index} • {role}"
+SETTINGS_ROLE_DOCTOR = "Лікар"
+SETTINGS_ROLE_PATIENT = "Пацієнт"
+SETTINGS_SWAP_CHANNELS = "⇄ Поміняти місцями"
+SETTINGS_LANGUAGE_LABEL = "Мова сесій"
+SETTINGS_LANGUAGE_UK = "Українська (uk)"
+SETTINGS_INPUT_NOTE = "Пристрій введення не використовується — обробка виконується з готового двоканального файлу."
+
+SETTINGS_CARD_PRIVACY = "Конфіденційність і хмарний ШІ"
+SETTINGS_ANONYMIZATION_LABEL = "Статус анонімізації"
+SETTINGS_ANONYMIZATION_BADGE = "Активно (локально: GLiNER + Regex)"
+SETTINGS_LLM_PROVIDER_LABEL = "Провайдер LLM"
+SETTINGS_LLM_PROVIDERS = ("Gemini",)
+SETTINGS_API_KEY_LABEL = "API-ключ провайдера"
+SETTINGS_API_KEY_PLACEHOLDER = "Введіть API-ключ..."
+SETTINGS_TEST_CONNECTION = "Тестувати зв'язок"
+
+SETTINGS_CARD_STORAGE = "Локальне сховище та шифрування"
+SETTINGS_DB_PATH_LABEL = "Шлях до бази даних"
+SETTINGS_AUDIO_PATH_LABEL = "Каталог аудіозаписів"
+SETTINGS_OPEN_FOLDER = "Відкрити теку"
+SETTINGS_FOLDER_MISSING = "Теку не знайдено"
+SETTINGS_ENCRYPTION_NOTE = (
+    "Конфіденційність даних забезпечується вбудованим шифруванням диска ОС "
+    "(BitLocker / FileVault) та локальним зберіганням на цьому комп'ютері."
+)
+
+SETTINGS_RESET = "Скинути до стандартних"
+SETTINGS_SAVE = "Зберегти налаштування"
+SETTINGS_SAVED_DEV = "Збережено (dev)"
+SETTINGS_RESET_DONE = "Налаштування скинуто до стандартних"
 
 PROFILE_ADD_SESSION_BUTTON = "+  Додати сесію"
 PROFILE_DELETE = "Видалити"
