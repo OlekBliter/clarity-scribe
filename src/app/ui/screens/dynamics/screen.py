@@ -152,6 +152,8 @@ class DynamicsScreen(BaseScreen):
         summary_layout.addWidget(self._summary)
         results.addWidget(self._summary_box)
         layout.addWidget(self._results)
+        self._window_note = _label("", "Muted", wrap=True)
+        layout.addWidget(self._window_note)
         layout.addWidget(_label(strings.DYNAMICS_NOTE, "Muted", wrap=True))
         layout.addStretch()
 
@@ -164,6 +166,7 @@ class DynamicsScreen(BaseScreen):
         self._crumb.set_path([strings.NAV_PATIENTS, strings.DYNAMICS_BREADCRUMB])
         self._sessions.hide()
         self._results.hide()
+        self._window_note.hide()
         self._status.hide()
         self._loading.show()
         clear_layout(self._grid)
@@ -198,10 +201,21 @@ class DynamicsScreen(BaseScreen):
             self._status.show()
             return
 
-        self._sessions.setText(strings.DYNAMICS_SESSIONS.format(sessions=data["sessions_label"]))
+        # Трекаємо лише останні DYNAMICS_MAX_SESSIONS сесій, старіші на графіках не показуємо.
+        windows = [
+            sorted(trend["values"], key=lambda point: point["session_number"])[-metrics.DYNAMICS_MAX_SESSIONS:]
+            for trend in data["trends"]
+        ]
+        truncated = any(len(trend["values"]) > len(win) for trend, win in zip(data["trends"], windows))
+        label = data["sessions_label"]
+        if truncated:
+            numbers = [point["session_number"] for win in windows for point in win]
+            label = strings.DYNAMICS_RANGE.format(first=min(numbers), last=max(numbers))
+        self._window_note.setText(strings.DYNAMICS_WINDOW_NOTE.format(count=metrics.DYNAMICS_MAX_SESSIONS))
+        self._window_note.setVisible(truncated)
+        self._sessions.setText(strings.DYNAMICS_SESSIONS.format(sessions=label))
         self._sessions.show()
-        for index, trend in enumerate(data["trends"]):
-            points = sorted(trend["values"], key=lambda point: point["session_number"])
+        for index, (trend, points) in enumerate(zip(data["trends"], windows)):
             values = [point["value"] for point in points]
             sessions = [point["session_number"] for point in points]
             card = _MetricCard(trend["metric"], trend["direction"], values, sessions,

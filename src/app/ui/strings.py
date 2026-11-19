@@ -51,7 +51,8 @@ STAGE_STATE_ERROR = "Помилка"
 DROPZONE_TITLE = "Перетягніть двоканальний файл"
 DROPZONE_HINT = ".wav · канал 0 — лікар, канал 1 — пацієнт"
 DROPZONE_BUTTON = "Додати файл"
-DROPZONE_CLEAR = "Скасувати"
+DROPZONE_CLEAR = "Видалити"
+DROPZONE_ADDED = "Файл додано"
 DROPZONE_DIALOG_TITLE = "Оберіть аудіофайл"
 DROPZONE_FILTER = "Аудіо"
 DROPZONE_BAD_TYPE = "Підтримуються лише файли: {types}"
@@ -67,6 +68,7 @@ ADD_DATE = "Дата сесії"
 ADD_START = "Запустити обробку"
 ADD_AGAIN = "Додати запис знову"
 ADD_TO_PROFILE = "До профілю пацієнта"
+ADD_START_HINT = "Додайте аудіофайл, щоб запустити обробку"
 ADD_DONE_TOAST = "Обробку завершено"
 ADD_RESUMED_HINT = "Обробка цієї сесії не розпочалась. Додайте запис знову: обробка почнеться з нуля з тим самим номером."
 
@@ -254,14 +256,13 @@ DYNAMICS_SLOPE_UNITS = {
 
 # --- Вероніка: Новий пацієнт, Налаштування, Архів ---
 NEW_PATIENT_TITLE = "Новий пацієнт"
-NEW_PATIENT_SUBTITLE = "Усі поля необов'язкові — картку можна заповнити пізніше"
+NEW_PATIENT_SUBTITLE = "Усі поля основних контактів обов'язкові. Екстрений контакт можна не заповнювати."
 NEW_PATIENT_CARD_MAIN = "Основні контакти"
 NEW_PATIENT_CARD_EMERGENCY = "Екстрений контакт"
 
 NEW_PATIENT_NAME_LABEL = "Прізвище та ім'я"
 NEW_PATIENT_NAME_PLACEHOLDER = "Наприклад: Мельник Олена"
 NEW_PATIENT_BIRTH_LABEL = "Дата народження"
-NEW_PATIENT_BIRTH_PLACEHOLDER = "дд.мм.рррр"
 NEW_PATIENT_PHONE_LABEL = "Телефон"
 NEW_PATIENT_PHONE_PLACEHOLDER = "+380 XX XXX XX XX"
 NEW_PATIENT_EMAIL_LABEL = "Email"
@@ -274,14 +275,11 @@ NEW_PATIENT_EMERG_REL_LABEL = "Стосунок"
 NEW_PATIENT_EMERG_PHONE_LABEL = "Телефон екстреного контакту"
 NEW_PATIENT_EMERG_CONSENT = "Пацієнт надав згоду на звернення до екстреного контакту"
 
-NEW_PATIENT_HINT_PHONE = "Формат: +380..."
-NEW_PATIENT_HINT_EMAIL = "Перевірте формат email"
-NEW_PATIENT_HINT_DATE = "Формат дати: дд.мм.рррр"
 
-NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
-NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
+NEW_PATIENT_CHANNELS = ("Telegram", "Телефон", "Email")
+NEW_PATIENT_RELATIONS = ("Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга")
 
-BTN_NEXT = "Далі — додати запис сесії"
+BTN_NEXT = "Далі"
 
 ARCHIVE_TITLE = "Архів пацієнтів"
 ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
@@ -350,3 +348,40 @@ PROFILE_DELETE_TEXT = (
 PROFILE_DELETE_CONFIRM = "Видалити"
 PROFILE_DELETED_TOAST = "Пацієнта видалено"
 PROFILE_SESSIONS_EMPTY = "Сесій ще немає"
+
+# --- Спільне: валідація форм, вибір зі списком, меню дій рядка ---
+VALIDATION_REQUIRED = "Обов'язкове поле"
+VALIDATION_MIN_LEN = "Не менше {min} символів"
+VALIDATION_MAX_LEN = "Не більше {max} символів"
+VALIDATION_PHONE = "Формат: +380 XX XXX XX XX"
+VALIDATION_EMAIL = "Перевірте формат email, наприклад name@example.com"
+VALIDATION_CHOOSE = "Оберіть варіант зі списку"
+VALIDATION_DATE = "Оберіть дату в календарі"
+VALIDATION_CONSENT = "Потрібна згода пацієнта"
+REQUIRED_MARK = " *"
+DATE_PLACEHOLDER = "дд.мм.рррр"
+CHOICE_PLACEHOLDER = "Оберіть зі списку"
+CHOICE_OTHER = "Інше"
+NEW_PATIENT_CHANNEL_OTHER_PLACEHOLDER = "Вкажіть свій канал зв'язку"
+NEW_PATIENT_RELATION_OTHER_PLACEHOLDER = "Вкажіть, ким приходиться"
+NEW_PATIENT_NEXT_HINT = "Щоб продовжити, заповніть: {what}"
+NEW_PATIENT_MISSING = {
+    "name": "прізвище та ім'я",
+    "birth": "дату народження",
+    "phone": "телефон",
+    "email": "email",
+    "channel": "зручний канал зв'язку",
+    "emerg_name": "ім'я екстреного контакту",
+    "emerg_relation": "стосунок екстреного контакту",
+    "emerg_phone": "телефон екстреного контакту",
+    "emerg_consent": "згоду на звернення до екстреного контакту",
+}
+
+ROW_MENU_TOOLTIP = "Дії"
+ROW_MENU_DELETE = "Видалити"
+SESSION_ROW_DELETE_TITLE = "Видалити сесію"
+SESSION_ROW_DELETE_TEXT = "Видалити сесію №{number} від {date}? Цю дію неможливо скасувати."
+PATIENT_ROW_DELETE_TITLE = "Видалити пацієнта"
+
+DYNAMICS_RANGE = "{first}–{last}"
+DYNAMICS_WINDOW_NOTE = "На графіках показано останні {count} сесій."

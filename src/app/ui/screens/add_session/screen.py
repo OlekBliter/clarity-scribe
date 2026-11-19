@@ -23,8 +23,7 @@ import logging
 from typing import Any
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.app.ui import metrics, strings
 from src.app.ui.errors import show_error
@@ -82,13 +81,13 @@ class AddSessionScreen(BaseScreen):
         root.addWidget(self._hint)
 
         after = QHBoxLayout()
+        after.addStretch(1)
         self._to_profile = primary_button(strings.ADD_TO_PROFILE)
         self._again = secondary_button(strings.ADD_AGAIN)
         self._to_profile.clicked.connect(self._open_profile)
         self._again.clicked.connect(self._show_form_mode)
-        after.addWidget(self._to_profile)
         after.addWidget(self._again)
-        after.addStretch(1)
+        after.addWidget(self._to_profile)
         root.addLayout(after)
         root.addStretch(1)
 
@@ -108,8 +107,8 @@ class AddSessionScreen(BaseScreen):
         self._lang = QComboBox()
         self._lang.addItem(strings.ADD_LANG_UK, "uk")
         fit_combo_popup(self._lang)
-        self._number = QLineEdit()
-        self._number.setReadOnly(True)
+        self._number = QLabel()  # просто цифра, без поля вводу
+        self._number.setObjectName("FieldValue")
         self._date = DateField()
         fields = QHBoxLayout()
         fields.setSpacing(metrics.SPACING)
@@ -122,11 +121,19 @@ class AddSessionScreen(BaseScreen):
             cell.addWidget(label)
             cell.addWidget(widget)
             fields.addLayout(cell)
+        fields.addStretch(1)
         col.addLayout(fields)
 
+        # Головна дія праворуч; поки вона вимкнена, поруч пояснення чому.
+        start_row = QHBoxLayout()
+        start_row.setSpacing(metrics.SPACING)
+        self._start_hint = QLabel(strings.ADD_START_HINT)
+        self._start_hint.setObjectName("Muted")
         self._start = primary_button(strings.ADD_START)
         self._start.clicked.connect(self._on_start)
-        col.addWidget(self._start, alignment=Qt.AlignmentFlag.AlignLeft)
+        start_row.addWidget(self._start_hint, stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
+        start_row.addWidget(self._start)
+        col.addLayout(start_row)
         return self._form
 
     # ------------------------------------------------------------------ режими
@@ -174,7 +181,9 @@ class AddSessionScreen(BaseScreen):
         self._again.hide()
 
     def _update_start(self) -> None:
-        self._start.setEnabled(self._drop.path is not None)
+        has_file = self._drop.path is not None
+        self._start.setEnabled(has_file)
+        self._start_hint.setVisible(not has_file)
 
     def _is_running(self) -> bool:
         return self._worker is not None and self._worker.isRunning()

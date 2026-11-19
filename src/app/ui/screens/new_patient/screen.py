@@ -2,33 +2,31 @@
 
 Фасад (методи, які використовує цей екран):
 - create_patient(contacts: dict) -> str (patient_id)
+
+Правила форми:
+- усі поля «Основних контактів» обов'язкові;
+- «Екстрений контакт» можна не заповнювати, але якщо заповнене або позначене
+  хоч щось (ім'я, стосунок, телефон, згода), то обов'язкове все, включно зі згодою;
+- «Далі» активна, лише коли форма коректна; під кнопкою пояснення, чого бракує.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
+                               QScrollArea, QVBoxLayout, QWidget)
 
-from src.app.ui import metrics, strings
+from src.app.ui import metrics, strings, validation
 from src.app.ui.errors import show_error
-from src.app.ui.qt_helpers import fit_combo_popup
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
-from src.app.ui.widgets.action_icon import ActionIcon
-from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
 from src.app.ui.widgets.date_field import DateField
+from src.app.ui.widgets.form_field import ChoiceWithOther, FormField
+
+_MAIN_KEYS = ("name", "birth", "phone", "email", "channel")
+_EMERG_KEYS = ("emerg_name", "emerg_relation", "emerg_phone", "emerg_consent")
 
 
 class NewPatientScreen(BaseScreen):
@@ -36,228 +34,214 @@ class NewPatientScreen(BaseScreen):
 
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
+        self._fields: dict[str, FormField] = {}
         self._init_ui()
 
+    # ------------------------------------------------------------ верстка
     def _init_ui(self) -> None:
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(*(metrics.CONTENT_MARGIN,) * 4)
-        main_layout.setSpacing(metrics.SPACING)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(*(metrics.CONTENT_MARGIN,) * 4)
+        root.setSpacing(metrics.SPACING)
 
-        top = QHBoxLayout()
-        back_btn = ActionIcon("back", strings.BACK)
-        back_btn.clicked.connect(self._on_cancel)
-        top.addWidget(back_btn)
+        title = QLabel(strings.NEW_PATIENT_TITLE)
+        title.setObjectName("ScreenTitle")
+        subtitle = QLabel(strings.NEW_PATIENT_SUBTITLE)
+        subtitle.setObjectName("Subtitle")
+        subtitle.setWordWrap(True)
+        root.addWidget(title)
+        root.addWidget(subtitle)
 
-        crumb = Breadcrumb(self)
-        crumb.set_path([strings.NAV_PATIENTS, strings.NEW_PATIENT_TITLE])
-        crumb.linkActivated.connect(lambda _link: self._on_cancel())
-        top.addWidget(crumb, 1)
-        main_layout.addLayout(top)
+        container = QWidget()
+        form = QVBoxLayout(container)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(metrics.SPACING)
+        form.setAlignment(Qt.AlignmentFlag.AlignTop)
+        form.addWidget(self._build_main_card())
+        form.addWidget(self._build_emergency_card())
 
-        title_label = QLabel(strings.NEW_PATIENT_TITLE)
-        title_label.setObjectName("ScreenTitle")
-        main_layout.addWidget(title_label)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(container)
+        root.addWidget(scroll, stretch=1)
 
-        subtitle_label = QLabel(strings.NEW_PATIENT_SUBTITLE)
-        subtitle_label.setObjectName("Subtitle")
-        main_layout.addWidget(subtitle_label)
+        actions = QHBoxLayout()
+        actions.setSpacing(metrics.SPACING)
+        self._next_hint = QLabel()
+        self._next_hint.setObjectName("Muted")
+        actions.addWidget(self._next_hint, stretch=1)
+        self.cancel_btn = outline_button(strings.CANCEL)
+        self.cancel_btn.clicked.connect(self.router.back)
+        self.next_btn = primary_button(strings.BTN_NEXT)
+        self.next_btn.clicked.connect(self._on_next)
+        actions.addWidget(self.cancel_btn)
+        actions.addWidget(self.next_btn)
+        root.addLayout(actions)
 
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        for field in self._fields.values():
+            field.changed.connect(self._refresh)
 
-        form_container = QWidget()
-        form_layout = QVBoxLayout(form_container)
-        form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setSpacing(metrics.SPACING)
-        form_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+    def _card(self, title: str) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("Card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(*(metrics.CARD_PADDING,) * 4)
+        layout.setSpacing(metrics.SPACING)
+        heading = QLabel(title)
+        heading.setObjectName("CardTitle")
+        layout.addWidget(heading)
+        return card, layout
 
-        main_card = QFrame()
-        main_card.setObjectName("Card")
-        main_card_layout = QVBoxLayout(main_card)
-        main_card_layout.setContentsMargins(*(metrics.CARD_PADDING,) * 4)
-        main_card_layout.setSpacing(metrics.SPACING)
+    def _add(self, layout: QVBoxLayout, key: str, label: str | None, widget: QWidget,
+             error_fn, required: bool = False) -> None:
+        field = FormField(label, widget, error_fn, required)
+        self._fields[key] = field
+        layout.addWidget(field)
 
-        main_card_title = QLabel(strings.NEW_PATIENT_CARD_MAIN)
-        main_card_title.setObjectName("CardTitle")
-        main_card_layout.addWidget(main_card_title)
+    def _build_main_card(self) -> QFrame:
+        card, col = self._card(strings.NEW_PATIENT_CARD_MAIN)
 
-        main_card_layout.addWidget(QLabel(strings.NEW_PATIENT_NAME_LABEL))
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText(strings.NEW_PATIENT_NAME_PLACEHOLDER)
-        main_card_layout.addWidget(self.name_input)
+        self._add(col, "name", strings.NEW_PATIENT_NAME_LABEL, self.name_input,
+                  lambda: validation.validate_name(self.name_input.text()), required=True)
 
-        main_card_layout.addWidget(QLabel(strings.NEW_PATIENT_BIRTH_LABEL))
-        self.birth_input = DateField()
+        self.birth_input = DateField(allow_empty=True)
         self.birth_input.setMaximumDate(QDate.currentDate())
-        main_card_layout.addWidget(self.birth_input)
-
-        phone_header = QHBoxLayout()
-        phone_header.addWidget(QLabel(strings.NEW_PATIENT_PHONE_LABEL))
-        self.phone_hint = QLabel(strings.NEW_PATIENT_HINT_PHONE)
-        self.phone_hint.setObjectName("Muted")
-        self.phone_hint.setVisible(False)
-        phone_header.addWidget(self.phone_hint, alignment=Qt.AlignmentFlag.AlignRight)
-        main_card_layout.addLayout(phone_header)
+        self._add(col, "birth", strings.NEW_PATIENT_BIRTH_LABEL, self.birth_input,
+                  lambda: None if self.birth_input.has_value() else strings.VALIDATION_DATE,
+                  required=True)
 
         self.phone_input = QLineEdit()
         self.phone_input.setPlaceholderText(strings.NEW_PATIENT_PHONE_PLACEHOLDER)
-        self.phone_input.textChanged.connect(self._validate_phone)
-        main_card_layout.addWidget(self.phone_input)
-
-        email_header = QHBoxLayout()
-        email_header.addWidget(QLabel(strings.NEW_PATIENT_EMAIL_LABEL))
-        self.email_hint = QLabel(strings.NEW_PATIENT_HINT_EMAIL)
-        self.email_hint.setObjectName("Muted")
-        self.email_hint.setVisible(False)
-        email_header.addWidget(self.email_hint, alignment=Qt.AlignmentFlag.AlignRight)
-        main_card_layout.addLayout(email_header)
+        self._add(col, "phone", strings.NEW_PATIENT_PHONE_LABEL, self.phone_input,
+                  lambda: validation.validate_phone(self.phone_input.text()), required=True)
+        self.phone_input.editingFinished.connect(
+            lambda: self._format_phone(self.phone_input))
 
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText(strings.NEW_PATIENT_EMAIL_PLACEHOLDER)
-        self.email_input.textChanged.connect(self._validate_email)
-        main_card_layout.addWidget(self.email_input)
+        self._add(col, "email", strings.NEW_PATIENT_EMAIL_LABEL, self.email_input,
+                  lambda: validation.validate_email(self.email_input.text()), required=True)
 
-        main_card_layout.addWidget(QLabel(strings.NEW_PATIENT_CHANNEL_LABEL))
-        self.channel_combo = QComboBox()
-        self.channel_combo.addItems(strings.NEW_PATIENT_CHANNELS)
-        fit_combo_popup(self.channel_combo)
-        main_card_layout.addWidget(self.channel_combo)
+        self.channel_input = ChoiceWithOther(
+            strings.NEW_PATIENT_CHANNELS, strings.NEW_PATIENT_CHANNEL_OTHER_PLACEHOLDER)
+        self._add(col, "channel", strings.NEW_PATIENT_CHANNEL_LABEL, self.channel_input,
+                  self.channel_input.error, required=True)
+        return card
 
-        form_layout.addWidget(main_card)
+    def _build_emergency_card(self) -> QFrame:
+        card, col = self._card(strings.NEW_PATIENT_CARD_EMERGENCY)
 
-        emerg_card = QFrame()
-        emerg_card.setObjectName("Card")
-        emerg_card_layout = QVBoxLayout(emerg_card)
-        emerg_card_layout.setContentsMargins(*(metrics.CARD_PADDING,) * 4)
-        emerg_card_layout.setSpacing(metrics.SPACING)
-
-        emerg_card_title = QLabel(strings.NEW_PATIENT_CARD_EMERGENCY)
-        emerg_card_title.setObjectName("CardTitle")
-        emerg_card_layout.addWidget(emerg_card_title)
-
-        emerg_card_layout.addWidget(QLabel(strings.NEW_PATIENT_EMERG_NAME_LABEL))
         self.emerg_name_input = QLineEdit()
         self.emerg_name_input.setPlaceholderText(strings.NEW_PATIENT_EMERG_NAME_PLACEHOLDER)
-        emerg_card_layout.addWidget(self.emerg_name_input)
+        self._add(col, "emerg_name", strings.NEW_PATIENT_EMERG_NAME_LABEL, self.emerg_name_input,
+                  lambda: self._emerg_error(
+                      not self.emerg_name_input.text().strip(),
+                      lambda: validation.validate_name(self.emerg_name_input.text())))
 
-        emerg_card_layout.addWidget(QLabel(strings.NEW_PATIENT_EMERG_REL_LABEL))
-        self.emerg_rel_combo = QComboBox()
-        self.emerg_rel_combo.addItems(strings.NEW_PATIENT_RELATIONS)
-        fit_combo_popup(self.emerg_rel_combo)
-        emerg_card_layout.addWidget(self.emerg_rel_combo)
-
-        emerg_phone_header = QHBoxLayout()
-        emerg_phone_header.addWidget(QLabel(strings.NEW_PATIENT_EMERG_PHONE_LABEL))
-        self.emerg_phone_hint = QLabel(strings.NEW_PATIENT_HINT_PHONE)
-        self.emerg_phone_hint.setObjectName("Muted")
-        self.emerg_phone_hint.setVisible(False)
-        emerg_phone_header.addWidget(self.emerg_phone_hint, alignment=Qt.AlignmentFlag.AlignRight)
-        emerg_card_layout.addLayout(emerg_phone_header)
+        self.emerg_rel_input = ChoiceWithOther(
+            strings.NEW_PATIENT_RELATIONS, strings.NEW_PATIENT_RELATION_OTHER_PLACEHOLDER)
+        self._add(col, "emerg_relation", strings.NEW_PATIENT_EMERG_REL_LABEL, self.emerg_rel_input,
+                  lambda: self._emerg_error(
+                      self.emerg_rel_input.is_empty(), self.emerg_rel_input.error))
 
         self.emerg_phone_input = QLineEdit()
         self.emerg_phone_input.setPlaceholderText(strings.NEW_PATIENT_PHONE_PLACEHOLDER)
-        self.emerg_phone_input.textChanged.connect(self._validate_emerg_phone)
-        emerg_card_layout.addWidget(self.emerg_phone_input)
+        self._add(col, "emerg_phone", strings.NEW_PATIENT_EMERG_PHONE_LABEL, self.emerg_phone_input,
+                  lambda: self._emerg_error(
+                      not self.emerg_phone_input.text().strip(),
+                      lambda: validation.validate_phone(self.emerg_phone_input.text())))
+        self.emerg_phone_input.editingFinished.connect(
+            lambda: self._format_phone(self.emerg_phone_input))
 
         self.emerg_consent_check = QCheckBox(strings.NEW_PATIENT_EMERG_CONSENT)
-        emerg_card_layout.addWidget(self.emerg_consent_check)
+        self.emerg_consent_check.setMinimumHeight(metrics.CHECKBOX_MIN_HEIGHT)
+        self._add(col, "emerg_consent", None, self.emerg_consent_check,
+                  lambda: (strings.VALIDATION_CONSENT
+                           if self._emerg_active() and not self.emerg_consent_check.isChecked()
+                           else None))
+        return card
 
-        form_layout.addWidget(emerg_card)
+    # ------------------------------------------------------------ правила
+    def _emerg_active(self) -> bool:
+        """Блок екстреного контакту «в роботі»: заповнено або позначено хоч щось."""
+        return (bool(self.emerg_name_input.text().strip())
+                or not self.emerg_rel_input.is_empty()
+                or bool(self.emerg_phone_input.text().strip())
+                or self.emerg_consent_check.isChecked())
 
-        scroll_area.setWidget(form_container)
-        main_layout.addWidget(scroll_area, stretch=1)
+    def _emerg_error(self, is_empty: bool, check) -> str | None:
+        """Порожнє поле блоку: помилка, якщо блок активний; заповнене: перевірка формату."""
+        if is_empty:
+            return strings.VALIDATION_REQUIRED if self._emerg_active() else None
+        return check()
 
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(metrics.SPACING)
-        actions_layout.addStretch(1)
+    @staticmethod
+    def _format_phone(edit: QLineEdit) -> None:
+        formatted = validation.normalize_phone(edit.text())
+        if formatted:
+            edit.setText(formatted)
 
-        self.cancel_btn = outline_button(strings.CANCEL)
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        actions_layout.addWidget(self.cancel_btn)
+    def _first_missing(self) -> str | None:
+        """Ключ першого некоректного поля у порядку на екрані (або None)."""
+        for key in _MAIN_KEYS + _EMERG_KEYS:
+            if self._fields[key].error():
+                return key
+        return None
 
-        self.next_btn = primary_button(strings.BTN_NEXT)
-        self.next_btn.clicked.connect(self._on_next)
-        actions_layout.addWidget(self.next_btn)
+    def _refresh(self) -> None:
+        """Оновлює помилки під полями, активність «Далі» та пояснення біля неї."""
+        for field in self._fields.values():
+            field.refresh()
+        missing = self._first_missing()
+        self.next_btn.setEnabled(missing is None)
+        self._next_hint.setText(
+            "" if missing is None
+            else strings.NEW_PATIENT_NEXT_HINT.format(what=strings.NEW_PATIENT_MISSING[missing]))
 
-        main_layout.addLayout(actions_layout)
-
-    def _validate_phone(self, text: str) -> None:
-        val = text.strip()
-        is_valid = not val or val.startswith("+380")
-        self.phone_hint.setVisible(not is_valid)
-
-    def _validate_email(self, text: str) -> None:
-        val = text.strip()
-        is_valid = not val or ("@" in val and "." in val.split("@")[-1])
-        self.email_hint.setVisible(not is_valid)
-
-    def _validate_emerg_phone(self, text: str) -> None:
-        val = text.strip()
-        is_valid = not val or val.startswith("+380")
-        self.emerg_phone_hint.setVisible(not is_valid)
-
+    # ------------------------------------------------------------ дії
     def _collect_contacts(self) -> dict:
-        contacts: dict = {}
-
-        if name := self.name_input.text().strip():
-            contacts["preferred_name"] = name
-        if self.birth_input.date() != QDate.currentDate():
-            contacts["birth_date"] = self.birth_input.date().toString("yyyy-MM-dd")
-        if phone := self.phone_input.text().strip():
-            contacts["phone"] = phone
-        if email := self.email_input.text().strip():
-            contacts["email"] = email
-
-        if self.channel_combo.currentIndex() > 0:
-            contacts["preferred_channel"] = self.channel_combo.currentText().strip()
-
-        if emerg_name := self.emerg_name_input.text().strip():
-            contacts["emergency_name"] = emerg_name
-
-        if self.emerg_rel_combo.currentIndex() > 0:
-            contacts["emergency_relation"] = self.emerg_rel_combo.currentText().strip()
-
-        if emerg_phone := self.emerg_phone_input.text().strip():
-            contacts["emergency_phone"] = emerg_phone
-
-        if self.emerg_consent_check.isChecked():
-            contacts["emergency_consent"] = True
-
+        contacts = {
+            "preferred_name": validation.collapse_spaces(self.name_input.text()),
+            "birth_date": self.birth_input.iso(),
+            "phone": validation.normalize_phone(self.phone_input.text()),
+            "email": self.email_input.text().strip(),
+            "preferred_channel": self.channel_input.value(),
+        }
+        if self._emerg_active():
+            contacts.update({
+                "emergency_name": validation.collapse_spaces(self.emerg_name_input.text()),
+                "emergency_relation": self.emerg_rel_input.value(),
+                "emergency_phone": validation.normalize_phone(self.emerg_phone_input.text()),
+                "emergency_consent": True,
+            })
         return contacts
 
-    def _on_cancel(self) -> None:
-        self.router.back()
-
     def _on_next(self) -> None:
-        contacts = self._collect_contacts()
+        if self._first_missing() is not None:  # страховка: кнопка мала бути вимкнена
+            return
         self.next_btn.setEnabled(False)
-        self.call(
-            self.facade.create_patient,
-            contacts,
-            on_success=self._on_created,
-            on_error=self._on_create_error,
-        )
+        self.call(self.facade.create_patient, self._collect_contacts(),
+                  on_success=self._on_created, on_error=self._on_create_error)
 
     def _on_created(self, patient_id: str) -> None:
-        self.next_btn.setEnabled(True)
         self.router.go(Route.ADD_SESSION, patient_id=patient_id)
 
     def _on_create_error(self, error: Exception) -> None:
         show_error(self, error)
-        self.next_btn.setEnabled(True)
+        self._refresh()
 
     def on_open(self, **params: Any) -> None:
         self.name_input.clear()
-        self.birth_input.setDate(QDate.currentDate())
+        self.birth_input.clear_value()
         self.phone_input.clear()
         self.email_input.clear()
-        self.channel_combo.setCurrentIndex(0)
+        self.channel_input.reset()
         self.emerg_name_input.clear()
-        self.emerg_rel_combo.setCurrentIndex(0)
+        self.emerg_rel_input.reset()
         self.emerg_phone_input.clear()
         self.emerg_consent_check.setChecked(False)
-        self.phone_hint.setVisible(False)
-        self.email_hint.setVisible(False)
-        self.emerg_phone_hint.setVisible(False)
-        self.next_btn.setEnabled(True)
+        for field in self._fields.values():
+            field.reset()
+        self._refresh()

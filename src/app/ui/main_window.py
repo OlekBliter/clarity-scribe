@@ -9,12 +9,12 @@ from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import set_active
 from src.app.ui.router import Route, Router
 from src.app.ui.screens.add_session import AddSessionScreen
-from src.app.ui.screens.archive import ArchiveScreen
 from src.app.ui.screens.dynamics import DynamicsScreen
 from src.app.ui.screens.medical_card import MedicalCardScreen
 from src.app.ui.screens.new_patient import NewPatientScreen
 from src.app.ui.screens.patient_profile import PatientProfileScreen
 from src.app.ui.screens.patients import PatientsScreen
+from src.app.ui.screens.placeholder import PlaceholderScreen
 from src.app.ui.screens.session import SessionScreen
 from src.app.ui.screens.settings import SettingsScreen
 from src.app.ui.widgets.toast import Toast
@@ -100,7 +100,9 @@ class MainWindow(QMainWindow):
             Route.SESSION: SessionScreen,
             Route.MEDICAL_CARD: MedicalCardScreen,
             Route.DYNAMICS: DynamicsScreen,
-            Route.ARCHIVE: ArchiveScreen,
+            # Архів поки заглушка: чесний напис замість вигаданих даних.
+            Route.ARCHIVE: lambda f, r: PlaceholderScreen(
+                strings.ARCHIVE_TITLE, f, r, show_back=False),
             Route.SETTINGS: SettingsScreen,
         }
         for route, screen_cls in screens.items():

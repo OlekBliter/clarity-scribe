@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.app.ui import metrics, strings
 from src.app.ui.errors import show_error
@@ -22,6 +22,7 @@ from src.app.ui.widgets.badge import badge_for
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import danger_button, outline_button, primary_button
 from src.app.ui.widgets.card import ListItemCard
+from src.app.ui.widgets.confirm import confirm_destructive
 from src.app.ui.widgets.skeleton import Skeleton
 
 
@@ -156,6 +157,7 @@ class PatientProfileScreen(BaseScreen):
                 session["subtitle"],
                 text,
                 variant,
+                actions=[(strings.ROW_MENU_DELETE, lambda s=session: self._confirm_delete_session(s))],
             )
             row.clicked.connect(lambda *_, s=session: self._open_session(s))
             self._sessions.addWidget(row)
@@ -185,19 +187,11 @@ class PatientProfileScreen(BaseScreen):
         """Просить підтвердження й видаляє пацієнта через фасад."""
         if self._patient_id is None:
             return
-        box = QMessageBox(self)
-        box.setWindowTitle(strings.PROFILE_DELETE_TITLE)
-        box.setText(strings.PROFILE_DELETE_TEXT.format(name=self._patient_name))
-        box.setIcon(QMessageBox.Icon.Warning)
-
-        confirm_btn = box.addButton(strings.PROFILE_DELETE_CONFIRM, QMessageBox.ButtonRole.DestructiveRole)
-        confirm_btn.setObjectName("DangerButton")
-        cancel_btn = box.addButton(strings.CANCEL, QMessageBox.ButtonRole.RejectRole)
-        cancel_btn.setObjectName("SecondaryButton")
-        box.setDefaultButton(cancel_btn)
-
-        box.exec()
-        if box.clickedButton() is not confirm_btn:
+        if not confirm_destructive(
+            self, strings.PROFILE_DELETE_TITLE,
+            strings.PROFILE_DELETE_TEXT.format(name=self._patient_name),
+            strings.PROFILE_DELETE_CONFIRM,
+        ):
             return
 
         self._delete.setEnabled(False)
@@ -206,6 +200,20 @@ class PatientProfileScreen(BaseScreen):
             self._patient_id,
             on_success=self._on_deleted,
             on_error=self._on_delete_error,
+        )
+
+    def _confirm_delete_session(self, session: dict) -> None:
+        """Видаляє одну сесію з меню «⋯» після підтвердження й перезавантажує профіль."""
+        if not confirm_destructive(
+            self, strings.SESSION_ROW_DELETE_TITLE,
+            strings.SESSION_ROW_DELETE_TEXT.format(number=session["number"], date=session["date"]),
+        ):
+            return
+        self.call(
+            self.facade.delete_session,
+            session["session_id"],
+            on_success=lambda _r=None: self.on_open(patient_id=self._patient_id),
+            on_error=lambda err: show_error(self, err),
         )
 
     def _on_deleted(self, _result: Any = None) -> None:

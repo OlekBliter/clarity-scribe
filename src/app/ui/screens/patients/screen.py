@@ -17,6 +17,8 @@ from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import badge_for
 from src.app.ui.widgets.buttons import primary_button
 from src.app.ui.widgets.card import ListItemCard
+from src.app.ui.widgets.confirm import confirm_destructive
+from src.app.ui.errors import show_error
 from src.app.ui.widgets.search_input import SearchInput
 
 
@@ -74,7 +76,22 @@ class PatientsScreen(BaseScreen):
             return
         for p in items:
             text, variant = badge_for(p.get("badge"))
-            card = ListItemCard(p.get("name") or strings.NO_NAME, p.get("subtitle", ""), text, variant)
+            name = p.get("name") or strings.NO_NAME
+            card = ListItemCard(
+                name, p.get("subtitle", ""), text, variant,
+                actions=[(strings.ROW_MENU_DELETE,
+                          lambda pid=p["patient_id"], n=name: self._confirm_delete(pid, n))])
             card.clicked.connect(lambda pid=p["patient_id"]: self.router.go(
                 Route.PATIENT_PROFILE, patient_id=pid))
             self._list.addWidget(card)
+
+    def _confirm_delete(self, patient_id: str, name: str) -> None:
+        """Видалення пацієнта з меню «⋯» рядка: підтвердження, фасад, оновлення списку."""
+        if not confirm_destructive(
+            self, strings.PATIENT_ROW_DELETE_TITLE,
+            strings.PROFILE_DELETE_TEXT.format(name=name), strings.PROFILE_DELETE_CONFIRM,
+        ):
+            return
+        self.call(self.facade.delete_patient, patient_id,
+                  on_success=lambda _r=None: self._load(self._search.text().strip()),
+                  on_error=lambda err: show_error(self, err))

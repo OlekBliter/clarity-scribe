@@ -2,7 +2,10 @@
 
 Сигнали:
     file_selected(path)   файл обрано (шлях до файла)
-    file_cleared()        лікар натиснув «Скасувати»
+    file_cleared()        лікар натиснув «Видалити»
+
+Зона підсвічується лише коли над нею тягнуть файл. Коли файл додано, другий
+додати не можна (ні перетягуванням, ні кнопкою): спершу «Видалити».
     file_rejected(text)   файл не підходить (текст для Toast)
 
 Окремий запуск для перегляду:  python -m src.app.ui.widgets.drop_zone
@@ -17,7 +20,7 @@ from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QVBoxLay
 
 from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import repolish
-from src.app.ui.widgets.buttons import outline_button, secondary_button
+from src.app.ui.widgets.buttons import danger_button, outline_button
 
 _BYTES_IN_MB = 1024 * 1024
 
@@ -39,14 +42,14 @@ class DropZone(QFrame):
         layout.setSpacing(metrics.SPACING)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        title = QLabel(strings.DROPZONE_TITLE)
-        title.setObjectName("CardTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint = QLabel(strings.DROPZONE_HINT)
-        hint.setObjectName("Muted")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        layout.addWidget(hint)
+        self._title = QLabel(strings.DROPZONE_TITLE)
+        self._title.setObjectName("CardTitle")
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._hint = QLabel(strings.DROPZONE_HINT)
+        self._hint.setObjectName("Muted")
+        self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._title)
+        layout.addWidget(self._hint)
 
         self._file_row = QWidget()
         row = QHBoxLayout(self._file_row)
@@ -54,16 +57,16 @@ class DropZone(QFrame):
         row.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._chip = QLabel()
         self._chip.setObjectName("FileChip")
-        clear_btn = secondary_button(strings.DROPZONE_CLEAR)
+        clear_btn = danger_button(strings.DROPZONE_CLEAR)
         clear_btn.clicked.connect(self.clear)
         row.addWidget(self._chip)
         row.addWidget(clear_btn)
-        self._file_row.hide()
         layout.addWidget(self._file_row)
 
-        pick = outline_button(strings.DROPZONE_BUTTON)
-        pick.clicked.connect(self._choose_file)
-        layout.addWidget(pick, alignment=Qt.AlignmentFlag.AlignCenter)
+        self._pick = outline_button(strings.DROPZONE_BUTTON)
+        self._pick.clicked.connect(self._choose_file)
+        layout.addWidget(self._pick, alignment=Qt.AlignmentFlag.AlignCenter)
+        self._show_empty_state()
 
     # ---- публічне API ----
     @property
@@ -74,15 +77,28 @@ class DropZone(QFrame):
         if self._path is None:
             return
         self._path = None
-        self._file_row.hide()
+        self._show_empty_state()
         self.file_cleared.emit()
+
+    def _show_empty_state(self) -> None:
+        self._title.setText(strings.DROPZONE_TITLE)
+        self._hint.show()
+        self._file_row.hide()
+        self._pick.show()
+        self._set_drag_active(False)
+
+    def _show_file_state(self) -> None:
+        self._title.setText(strings.DROPZONE_ADDED)
+        self._hint.hide()
+        self._file_row.show()
+        self._pick.hide()
 
     # ---- вибір файла ----
     def _choose_file(self) -> None:
         masks = " ".join(f"*{ext}" for ext in self._extensions)
         path, _ = QFileDialog.getOpenFileName(
             self, strings.DROPZONE_DIALOG_TITLE, "", f"{strings.DROPZONE_FILTER} ({masks})")
-        if path:
+        if path and self._path is None:
             self._accept(path)
 
     def _accept(self, path: str) -> bool:
@@ -93,7 +109,7 @@ class DropZone(QFrame):
         self._path = path
         size_mb = os.path.getsize(path) / _BYTES_IN_MB if os.path.exists(path) else 0.0
         self._chip.setText(strings.DROPZONE_FILE_FMT.format(name=Path(path).name, size_mb=size_mb))
-        self._file_row.show()
+        self._show_file_state()
         self.file_selected.emit(path)
         return True
 
@@ -104,7 +120,7 @@ class DropZone(QFrame):
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt API)
         urls = event.mimeData().urls()
-        if urls and urls[0].isLocalFile():
+        if self._path is None and urls and urls[0].isLocalFile():
             self._set_drag_active(True)
             event.acceptProposedAction()
         else:
@@ -117,7 +133,7 @@ class DropZone(QFrame):
     def dropEvent(self, event) -> None:  # noqa: N802 (Qt API)
         self._set_drag_active(False)
         urls = event.mimeData().urls()
-        if urls and urls[0].isLocalFile():
+        if self._path is None and urls and urls[0].isLocalFile():
             self._accept(urls[0].toLocalFile())
             event.acceptProposedAction()
 

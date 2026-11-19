@@ -9,7 +9,7 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
                                QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton,
                                QScrollArea, QTextEdit, QVBoxLayout, QWidget)
 
@@ -19,6 +19,7 @@ from src.app.ui.widgets.badge import VARIANTS, Badge
 from src.app.ui.widgets.buttons import (danger_button, outline_button, primary_button,
                                         secondary_button)
 from src.app.ui.widgets.card import Card, ListItemCard
+from src.app.ui.widgets.date_field import DateField
 from src.app.ui.widgets.toast import Toast
 
 
@@ -91,7 +92,7 @@ class Gallery(QWidget):
         name.setPlaceholderText("Введіть ім'я")
         combo = QComboBox()
         combo.addItems(["Telegram", "Телефон", "Email"])
-        date = QDateEdit()
+        date = DateField()
         date.setDisplayFormat("dd.MM.yyyy")
         col.addLayout(_row(name, combo, date, QCheckBox("Надаю згоду")))
         note = QTextEdit()
