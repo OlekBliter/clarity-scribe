@@ -10,6 +10,7 @@ from PySide6.QtGui import QHideEvent
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
 from src.app.ui import strings as S
+from src.app.ui.export_pdf import ask_save_path, export_soap
 from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Router
 from src.app.ui.screens.base import BaseScreen
@@ -63,7 +64,7 @@ class SessionScreen(BaseScreen):
         self.view.save.clicked.connect(self._save)
         self.view.approve.clicked.connect(self._approve)
         self.view.delete.clicked.connect(self._delete)
-        self.view.export.clicked.connect(self._soon)
+        self.view.export.clicked.connect(self._export)
 
     def on_open(self, **params: Any) -> None:
         """Start all four facade requests and remember this review's timestamp.
@@ -356,6 +357,24 @@ class SessionScreen(BaseScreen):
         self._selected_id = segment_id
         self.view.transcript.select_segment(segment_id)
         self.view.audio.seek(float(segment["start"]))
+
+    def _export(self, checked: bool = False) -> None:
+        if self._busy or not self._data.get("soap"):
+            return
+        data = self.view.soap.export_data()
+        data["status_label"] = self.view.badge.text()
+        name = S.PDF_SOAP_NAME.format(name=data.get("patient_name", S.NO_NAME), number=data.get("number", ""))
+        path = ask_save_path(self, name)
+        if path is None:
+            return
+        try:
+            export_soap(data, path)
+        except OSError as exc:
+            self._toast(S.PDF_WRITE_ERROR.format(error=str(exc)))
+        except Exception as exc:
+            self._toast(S.PDF_EXPORT_ERROR.format(error=str(exc)))
+        else:
+            self._toast(S.SESSION_SAVED)
 
     def _soon(self, checked: bool = False) -> None:
         """Present the K3/K4 placeholder without persisting or deleting data."""

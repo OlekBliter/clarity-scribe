@@ -94,6 +94,7 @@ class SoapPanel(QScrollArea):
 
     def set_soap(self, soap: dict[str, Any]) -> None:
         """Replace the form, preserving contract paths for future save actions."""
+        self._displayed_soap = deepcopy(soap)
         self.sources = {key: deepcopy(soap.get(key, {}).get("sources", []))
                         for key in ("subjective", "objective", "assessment")}
         old = self.takeWidget()
@@ -165,6 +166,18 @@ class SoapPanel(QScrollArea):
             column.addWidget(card)
         column.addStretch()
         self.setWidget(body)
+
+    def export_data(self) -> dict[str, Any]:
+        """Capture the displayed document, including local edits and source removals."""
+        data = deepcopy(self._displayed_soap)
+        for key, paths in self._section_paths.items():
+            if key == "plan":
+                for item, path in zip(data.get(key, []), paths):
+                    item["text"] = self.editors[path].toPlainText()
+            else:
+                data.setdefault(key, {})["text"] = self.editors[f"{key}.text"].toPlainText()
+                data[key]["sources"] = deepcopy(self.sources[key])
+        return data
 
     def section_text(self, key: str) -> str:
         """Return the current (possibly edited) text of one SOAP block."""

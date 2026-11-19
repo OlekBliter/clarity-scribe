@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.app.ui import metrics, strings
+from src.app.ui.export_pdf import export_dynamics, save_screen_pdf
 from src.app.ui.qt_helpers import clear_layout
 from src.app.ui.widgets.action_icon import ActionIcon
 from src.app.ui.router import Route, Router
@@ -103,9 +104,10 @@ class DynamicsScreen(BaseScreen):
         self._crumb.setTextFormat(Qt.TextFormat.PlainText)
         self._crumb.setWordWrap(True)
         top.addWidget(self._crumb, 1)
-        export = outline_button(strings.DYNAMICS_EXPORT)
-        export.clicked.connect(self._show_export_toast)
-        top.addWidget(export)
+        self.export = outline_button(strings.DYNAMICS_EXPORT)
+        self.export.setEnabled(False)
+        self.export.clicked.connect(self._export)
+        top.addWidget(self.export)
         layout.addLayout(top)
 
         header = QHBoxLayout()
@@ -165,6 +167,8 @@ class DynamicsScreen(BaseScreen):
         self._sessions.hide()
         self._results.hide()
         self._status.hide()
+        self._data = None
+        self.export.setEnabled(False)
         self._loading.show()
         clear_layout(self._grid)
 
@@ -181,6 +185,7 @@ class DynamicsScreen(BaseScreen):
         if not self._is_current(request_id):
             return
         name = profile["name"] or strings.NO_NAME
+        self._patient_name = name
         self._title.setText(strings.DYNAMICS_PATIENT_TITLE.format(name=name))
         self._crumb.set_path([strings.NAV_PATIENTS, name, strings.DYNAMICS_BREADCRUMB])
         self.call(
@@ -211,6 +216,8 @@ class DynamicsScreen(BaseScreen):
 
         self._summary.setText(data["summary_text"])
         self._summary_box.setVisible(bool(data["summary_text"]))
+        self._data = dict(data, patient_name=self._patient_name)
+        self.export.setEnabled(True)
         self._results.show()
 
     def _show_error(self, exc: BaseException, request_id: int) -> None:
@@ -221,7 +228,7 @@ class DynamicsScreen(BaseScreen):
         self._status.show()
         self._default_error(exc)
 
-    def _show_export_toast(self) -> None:
-        toast = getattr(self.window(), "toast", None)
-        if toast is not None:
-            toast.show_message(strings.DYNAMICS_EXPORT_SOON)
+    def _export(self):
+        if self._data:
+            name = strings.PDF_TREND_NAME.format(name=self._patient_name)
+            save_screen_pdf(self, self._data, name, export_dynamics)

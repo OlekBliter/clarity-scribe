@@ -152,7 +152,7 @@ MEDCARD_SAVE = 'Зберегти правки'
 MEDCARD_APPROVE = 'Підтвердити'
 MEDCARD_ACTIONS_HINT = 'Збереження та підтвердження будуть доступні в A4.'
 MEDCARD_LOADING = 'Завантаження медкартки…'
-MEDCARD_EMPTY = 'Медкартки ще немає.'
+MEDCARD_EMPTY = 'Медкартка ще не готова'
 MEDCARD_ERROR = 'Не вдалося завантажити медкартку.'
 MEDCARD_LOCAL = 'Лише локально'
 MEDCARD_DOCTOR = 'Заповнює лікар'
@@ -350,3 +350,38 @@ PROFILE_DELETE_TEXT = (
 PROFILE_DELETE_CONFIRM = "Видалити"
 PROFILE_DELETED_TOAST = "Пацієнта видалено"
 PROFILE_SESSIONS_EMPTY = "Сесій ще немає"
+
+# PDF export
+PDF_SAVE_TITLE = "Зберегти PDF"
+PDF_FILTER = "PDF (*.pdf)"
+PDF_SOAP_NAME = "SOAP_{name}_сесія{number}.pdf"
+PDF_WRITE_ERROR = "Не вдалося записати PDF. Перевірте доступ до папки та чи не відкрито файл в іншій програмі. {error}"
+PDF_EXPORT_ERROR = "Не вдалося створити PDF: {error}"
+PDF_SOAP_TITLE = "SOAP-нотатка"
+PDF_CARD_TITLE = "Медкартка першого прийому"
+PDF_DYNAMICS_TITLE = "Звіт про динаміку"
+PDF_PATIENT = "ПАЦІЄНТ"
+PDF_SESSION = "СЕСІЯ"
+PDF_DATE = "ДАТА"
+PDF_STATUS = "Статус"
+PDF_MISSING = "—"
+PDF_PAGE = "Стор. {page} / {total}"
+PDF_DOCTOR = "ЛІКАР: ____________________"
+PDF_SIGNATURE = "ПІДПИС: ____________________"
+PDF_SECTIONS = (("subjective", "S", "Суб’єктивний стан", "Subjective"),
+                ("objective", "O", "Об’єктивні дані", "Objective"),
+                ("assessment", "A", "Оцінка та динаміка", "Assessment"),
+                ("plan", "P", "Терапевтичний план", "Plan"))
+PDF_BIOMARKERS = "Біомаркери"
+PDF_METRIC_HEADERS = ("Назва", "Значення", "Базове значення", "Напрямок")
+PDF_DIRECTIONS = {"up": "Зростання ↑", "down": "Зниження ↓", "stable": "Без змін →"}
+PDF_SOURCES = "ДЖЕРЕЛА"
+PDF_CONTACTS = "Контактні дані"
+PDF_VALUE = "Значення"
+PDF_NO_GUI = "Для експорту потрібен запущений QApplication."
+PDF_WRITE_FAILED = "Помилка запису PDF."
+
+PDF_CARD_NAME = "Медкартка_{name}.pdf"
+PDF_TREND_NAME = "Динаміка_{name}.pdf"
+PDF_TREND_SUMMARY = "Підсумок динаміки"
+PDF_SESSION_METRICS = "Показники за сесіями"
