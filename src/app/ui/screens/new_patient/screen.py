@@ -1,12 +1,13 @@
 """Екран створення нового пацієнта.
 
 Фасад (методи, які використовує цей екран):
-  - create_patient(contacts: dict) -> str (patient_id)
+- create_patient(contacts: dict) -> str (patient_id)
 """
 from __future__ import annotations
 
+from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,15 +21,19 @@ from PySide6.QtWidgets import (
 )
 
 from src.app.ui import metrics, strings
+from src.app.ui.errors import show_error
+from src.app.ui.qt_helpers import fit_combo_popup
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.action_icon import ActionIcon
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
+from src.app.ui.widgets.date_field import DateField
 
 
 class NewPatientScreen(BaseScreen):
     """Форма створення нового пацієнта з двома картками контактів."""
+
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._init_ui()
@@ -82,17 +87,9 @@ class NewPatientScreen(BaseScreen):
         self.name_input.setPlaceholderText(strings.NEW_PATIENT_NAME_PLACEHOLDER)
         main_card_layout.addWidget(self.name_input)
 
-        birth_header = QHBoxLayout()
-        birth_header.addWidget(QLabel(strings.NEW_PATIENT_BIRTH_LABEL))
-        self.birth_hint = QLabel(strings.NEW_PATIENT_HINT_DATE)
-        self.birth_hint.setObjectName("Muted")
-        self.birth_hint.setVisible(False)
-        birth_header.addWidget(self.birth_hint, alignment=Qt.AlignmentFlag.AlignRight)
-        main_card_layout.addLayout(birth_header)
-
-        self.birth_input = QLineEdit()
-        self.birth_input.setPlaceholderText(strings.NEW_PATIENT_BIRTH_PLACEHOLDER)
-        self.birth_input.textChanged.connect(self._validate_birth_date)
+        main_card_layout.addWidget(QLabel(strings.NEW_PATIENT_BIRTH_LABEL))
+        self.birth_input = DateField()
+        self.birth_input.setMaximumDate(QDate.currentDate())
         main_card_layout.addWidget(self.birth_input)
 
         phone_header = QHBoxLayout()
@@ -124,6 +121,7 @@ class NewPatientScreen(BaseScreen):
         main_card_layout.addWidget(QLabel(strings.NEW_PATIENT_CHANNEL_LABEL))
         self.channel_combo = QComboBox()
         self.channel_combo.addItems(strings.NEW_PATIENT_CHANNELS)
+        fit_combo_popup(self.channel_combo)
         main_card_layout.addWidget(self.channel_combo)
 
         form_layout.addWidget(main_card)
@@ -146,6 +144,7 @@ class NewPatientScreen(BaseScreen):
         emerg_card_layout.addWidget(QLabel(strings.NEW_PATIENT_EMERG_REL_LABEL))
         self.emerg_rel_combo = QComboBox()
         self.emerg_rel_combo.addItems(strings.NEW_PATIENT_RELATIONS)
+        fit_combo_popup(self.emerg_rel_combo)
         emerg_card_layout.addWidget(self.emerg_rel_combo)
 
         emerg_phone_header = QHBoxLayout()
@@ -183,17 +182,6 @@ class NewPatientScreen(BaseScreen):
 
         main_layout.addLayout(actions_layout)
 
-    def _validate_birth_date(self, text: str) -> None:
-        val = text.strip()
-        parts = val.split(".")
-        is_valid = not val or (
-                len(parts) == 3
-                and len(parts[0]) == 2 and parts[0].isdigit()
-                and len(parts[1]) == 2 and parts[1].isdigit()
-                and len(parts[2]) == 4 and parts[2].isdigit()
-        )
-        self.birth_hint.setVisible(not is_valid)
-
     def _validate_phone(self, text: str) -> None:
         val = text.strip()
         is_valid = not val or val.startswith("+380")
@@ -214,8 +202,8 @@ class NewPatientScreen(BaseScreen):
 
         if name := self.name_input.text().strip():
             contacts["preferred_name"] = name
-        if birth := self.birth_input.text().strip():
-            contacts["birth_date"] = birth
+        if self.birth_input.date() != QDate.currentDate():
+            contacts["birth_date"] = self.birth_input.date().toString("yyyy-MM-dd")
         if phone := self.phone_input.text().strip():
             contacts["phone"] = phone
         if email := self.email_input.text().strip():
@@ -256,11 +244,12 @@ class NewPatientScreen(BaseScreen):
         self.router.go(Route.ADD_SESSION, patient_id=patient_id)
 
     def _on_create_error(self, error: Exception) -> None:
+        show_error(self, error)
         self.next_btn.setEnabled(True)
 
-    def on_open(self, **params) -> None:
+    def on_open(self, **params: Any) -> None:
         self.name_input.clear()
-        self.birth_input.clear()
+        self.birth_input.setDate(QDate.currentDate())
         self.phone_input.clear()
         self.email_input.clear()
         self.channel_combo.setCurrentIndex(0)
@@ -268,3 +257,7 @@ class NewPatientScreen(BaseScreen):
         self.emerg_rel_combo.setCurrentIndex(0)
         self.emerg_phone_input.clear()
         self.emerg_consent_check.setChecked(False)
+        self.phone_hint.setVisible(False)
+        self.email_hint.setVisible(False)
+        self.emerg_phone_hint.setVisible(False)
+        self.next_btn.setEnabled(True)

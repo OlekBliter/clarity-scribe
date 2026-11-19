@@ -529,15 +529,26 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             }
 
     def _apply_soap_edits(self, soap: dict[str, Any], edits: list[dict[str, Any]]) -> None:
+        source_ids = None
         parsed = []
         for edit in edits:
             match = _SOAP_PATH_RE.match(str(edit.get("path", "")))
             value = edit.get("new_value")
-            if not match or not isinstance(value, str):
+            if edit.get("path") == "subjective.source_segments":
+                original = soap["subjective"]["source_segments"]
+                if (not isinstance(value, list)
+                        or any(type(i) is not int or i not in original for i in value)
+                        or len(set(value)) != len(value)):
+                    raise FacadeError("Некоректні джерела SOAP")
+                source_ids = list(value)
+                continue
+            if not match or not isinstance(value, str) or not value.strip():
                 raise FacadeError("Не вдалося зберегти правки")
             if match.group(2) is not None and int(match.group(2)) >= len(soap["plan"]):
                 raise FacadeError("Не вдалося зберегти правки")
             parsed.append((match, value))
+        if source_ids is not None:
+            soap["subjective"]["source_segments"] = source_ids
         for match, value in parsed:  # apply only after everything is valid
             if match.group(1):
                 soap[match.group(1)]["text"] = value
@@ -657,19 +668,45 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             card["fields"][field_id]["value"] = value
             card["edited"].add(field_id)
 
-    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
-        with self._lock:
-            card = self._card(patient_id)
-            if card["status"] == "approved":
-                raise FacadeError("Підтверджені дані змінювати не можна")
-            self._apply_card_edits(card, edits)
+    supports_card_details = True
 
-    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
+    def _apply_card_review(self, patient_id, card, edits, contacts, evidence):
+        # Validate related updates before changing any part of the draft.
+        for key, value in contacts.items():
+            if key not in _CONTACT_KEYS:
+                raise FacadeError("Невідоме контактне поле")
+            if key == "emergency_consent":
+                valid = isinstance(value, bool)
+            else:
+                valid = value is None or isinstance(value, str)
+            if not valid:
+                raise FacadeError("Некоректне значення контакту")
+        for key, ids in evidence.items():
+            if (key not in card["fields"] or not isinstance(ids, list)
+                    or any(type(i) is not int or i not in card["fields"][key]["evidence"] for i in ids)
+                    or len(ids) != len(set(ids))):
+                raise FacadeError("Некоректні джерела медкартки")
+        self._apply_card_edits(card, edits)
+        self._patients[patient_id].update(contacts)
+        for key, ids in evidence.items():
+            card["fields"][key]["evidence"] = list(ids)
+            card["edited"].add(key)
+
+    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime,
+                  *, contacts=None, evidence=None) -> None:
         with self._lock:
             card = self._card(patient_id)
             if card["status"] == "approved":
                 raise FacadeError("Підтверджені дані змінювати не можна")
-            self._apply_card_edits(card, edits)
+            self._apply_card_review(patient_id, card, edits, contacts or {}, evidence or {})
+
+    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime,
+                  *, contacts=None, evidence=None) -> None:
+        with self._lock:
+            card = self._card(patient_id)
+            if card["status"] == "approved":
+                raise FacadeError("Підтверджені дані змінювати не можна")
+            self._apply_card_review(patient_id, card, edits, contacts or {}, evidence or {})
             card["status"] = "approved"
             first = self._patient_sessions(patient_id)[0]
             self._maybe_approve_session(first)

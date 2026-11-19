@@ -93,7 +93,8 @@ def build_soap_view(
             "chips": chips
         },
         "assessment": dict(soap_data.get("assessment", {})),
-        "plan": [dict(item) for item in soap_data.get("plan", [])]
+        "plan": [{"text": item["text"], "origin": item["origin"]}
+            for item in soap_data.get("plan", [])],
     }
 
 
@@ -133,7 +134,9 @@ def build_card_view(
             "state": state,
             "value": d_field.get("value"),
             "contradiction_text": dr_field.get("contradiction_text"),
-            "sources": build_sources(dr_field.get("evidence", []), segments),
+            "sources": build_sources(
+                d_field.get("evidence", dr_field.get("evidence", [])), segments
+            ),
             "edited_by_doctor": d_field.get("edited_by_doctor", False)
         })
 

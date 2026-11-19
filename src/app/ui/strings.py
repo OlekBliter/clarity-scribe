@@ -80,6 +80,13 @@ SESSION_SAVE = "Зберегти правки"
 SESSION_APPROVE = "Підтвердити"
 SESSION_DELETE = "Видалити сесію"
 SESSION_EXPORT = "Експорт нотатки"
+SESSION_NO_EDITS = "Спочатку внесіть правки."
+SOURCE_CONFIRM_REMOVE = "Прибрати таймкод {time} з цього поля?"
+SESSION_SAVED = "Збережено"
+SESSION_DELETED = "Сесію видалено"
+SESSION_CONFIRM_APPROVE = "Підтвердити SOAP-нотатку сесії №{number}? Після цього вона буде доступна лише для читання."
+SESSION_CONFIRM_DELETE = "Видалити сесію №{number}? Цю дію неможливо скасувати."
+SESSION_REOPEN_APPROVED = "Нотатку підтверджено. Відкрийте сесію повторно, щоб переглянути її."
 SESSION_SOON = "Скоро"
 SESSION_TRANSCRIPT_EMPTY = "Стенограма відсутня"
 SESSION_TRANSCRIPT_ERROR = "Не вдалося завантажити стенограму"
@@ -137,6 +144,10 @@ MEDCARD_TITLE = 'Медкартка першого прийому • {date}'
 MEDCARD_BREADCRUMB = 'Медкартка'
 MEDCARD_EXPORT = 'Експорт медкартки'
 MEDCARD_SOON = 'Скоро'
+MEDCARD_CONFIRM_APPROVE = "Підтвердити медкартку? Після цього вона буде доступна лише для читання."
+MEDCARD_SAVED = "Збережено"
+MEDCARD_NO_EDITS = "Спочатку внесіть правки."
+MEDCARD_DETAILS_UNSUPPORTED = "Ця версія фасаду ще не підтримує збереження контактів або таймкодів."
 MEDCARD_SAVE = 'Зберегти правки'
 MEDCARD_APPROVE = 'Підтвердити'
 MEDCARD_ACTIONS_HINT = 'Збереження та підтвердження будуть доступні в A4.'
@@ -145,7 +156,7 @@ MEDCARD_EMPTY = 'Медкартки ще немає.'
 MEDCARD_ERROR = 'Не вдалося завантажити медкартку.'
 MEDCARD_LOCAL = 'Лише локально'
 MEDCARD_DOCTOR = 'Заповнює лікар'
-MEDCARD_EDITED = 'Відредаговано лікарем'
+MEDCARD_EDITED = 'Виправлено лікарем'
 MEDCARD_YES = 'Так'
 MEDCARD_NO = 'Ні'
 MEDCARD_NONE = '—'
@@ -269,7 +280,7 @@ NEW_PATIENT_HINT_DATE = "Формат дати: дд.мм.рррр"
 NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
 NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
 
-BTN_NEXT = "Далі - додати запис сесії"
+BTN_NEXT = "Далі — додати запис сесії"
 
 ARCHIVE_TITLE = "Архів пацієнтів"
 ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
@@ -328,3 +339,13 @@ SETTINGS_RESET = "Скинути до стандартних"
 SETTINGS_SAVE = "Зберегти налаштування"
 SETTINGS_SAVED_DEV = "Збережено (dev)"
 SETTINGS_RESET_DONE = "Налаштування скинуто до стандартних"
+
+PROFILE_ADD_SESSION_BUTTON = "+  Додати сесію"
+PROFILE_DELETE = "Видалити"
+PROFILE_DELETE_TITLE = "Видалити пацієнта"
+PROFILE_DELETE_TEXT = (
+    "Видалити пацієнта «{name}» разом з усіма сесіями та аудіозаписами? "
+    "Цю дію неможливо скасувати.")
+PROFILE_DELETE_CONFIRM = "Видалити"
+PROFILE_DELETED_TOAST = "Пацієнта видалено"
+PROFILE_SESSIONS_EMPTY = "Сесій ще немає"

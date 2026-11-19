@@ -47,7 +47,11 @@ from src.services.orchestrator.builders import (
     build_s5_in,
     build_s6_in,
 )
-from src.services.orchestrator.edits import apply_card_edits, apply_soap_edits
+from src.services.orchestrator.edits import (
+    apply_card_edits,
+    apply_card_evidence,
+    apply_soap_edits,
+)
 from src.services.orchestrator.restore import (
     apply_items_to_s3,
     apply_items_to_s4,
@@ -92,6 +96,31 @@ STEP_ERRORS: tuple[type[Exception], ...] = SYSTEM_ERRORS + (
 )
 
 REQUIRED_SYSTEM_KEYS: frozenset[str] = frozenset({"s1", "s2", "s3", "s4", "s5", "s6"})
+CARD_CONTACT_FIELDS = frozenset({
+    "preferred_name",
+    "birth_date",
+    "phone",
+    "email",
+    "preferred_channel",
+    "emergency_name",
+    "emergency_relation",
+    "emergency_phone",
+    "emergency_consent",
+})
+
+
+def _validate_card_contacts(contacts: dict[str, Any]) -> None:
+    if not isinstance(contacts, dict):
+        raise DoctorInputError("Некоректні контактні дані.")
+    for key, value in contacts.items():
+        if key not in CARD_CONTACT_FIELDS:
+            raise DoctorInputError("Невідоме контактне поле.")
+        if key == "emergency_consent":
+            valid = type(value) is bool
+        else:
+            valid = value is None or isinstance(value, str)
+        if not valid:
+            raise DoctorInputError("Некоректне значення контактного поля.")
 
 
 def build_default_systems() -> dict[str, Any]:
@@ -731,6 +760,8 @@ class Orchestrator:
         """Save doctor edits or approve a SOAP note or medical card atomically."""
         with self.db.transaction() as conn:
             if command.target == "soap":
+                if command.contacts or command.evidence:
+                    raise DoctorInputError("Некоректні дані правок SOAP.")
                 session = self.sessions_repo.get(conn, command.id)
                 document = self.soap_repo.get(conn, command.id)
                 self._require_editable(document)
@@ -759,10 +790,17 @@ class Orchestrator:
                     conn, command.id, command.review_started_at.isoformat()
                 )
 
-                if command.edits:
-                    result = apply_card_edits(document["data"], command.edits)
+                _validate_card_contacts(command.contacts)
+                result = apply_card_edits(document["data"], command.edits)
+                if command.evidence:
+                    result = apply_card_evidence(result, command.evidence)
+                if command.edits or command.evidence:
                     self.cards_repo.save_edits(
                         conn, command.id, result.model_dump(mode="json")
+                    )
+                if command.contacts:
+                    self.patients_repo.update_contacts(
+                        conn, command.id, command.contacts
                     )
 
                 if command.action == "approve":

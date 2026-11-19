@@ -186,8 +186,10 @@ class ClarityScribeFacade(ABC):
         """Save doctor edits (status stays ``draft``).
 
         Args:
-            edits: ``[{"path": "subjective.text" | "objective.text" | "assessment.text"
-                       | "plan[<i>].text", "new_value": str}]``
+            edits: ``[{"path": "subjective.text" | "subjective.source_segments"
+                       | "objective.text" | "assessment.text" | "plan[<i>].text",
+                       "new_value": ...}]``. ``subjective.source_segments`` accepts
+                       a list of currently attached segment IDs; ``[]`` removes all sources.
             review_started_at: When the doctor opened the screen.
 
         Raises:
@@ -255,15 +257,35 @@ class ClarityScribeFacade(ABC):
 
     @abstractmethod
     def save_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[int]] | None = None,
     ) -> None:
-        """Save doctor edits of the card. ``edits`` = ``[{"path": field_id, "new_value": ...}]``."""
+        """Save card field, contact, and source edits without approving.
+
+        ``contacts`` contains changed patient contact fields. ``evidence`` maps
+        card field IDs to the currently attached segment IDs to keep; ``[]``
+        removes all source links for that field.
+        """
 
     @abstractmethod
     def approve_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[int]] | None = None,
     ) -> None:
-        """Apply edits (if any) and approve the card."""
+        """Apply card field, contact, and source edits and approve the card.
+
+        ``contacts`` and ``evidence`` use the same format as ``save_card``.
+        """
 
     # ----------------------------------------------------------------- dynamics
 

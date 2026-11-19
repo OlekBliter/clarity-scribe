@@ -8,8 +8,9 @@ from typing import Any, cast
 
 from PySide6.QtGui import QHideEvent
 from PySide6.QtMultimedia import QMediaPlayer
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
 from src.app.ui import strings as S
+from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Router
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import badge_for
@@ -56,8 +57,13 @@ class SessionScreen(BaseScreen):
         self.view.soap.source_clicked.connect(self._source_clicked)
         self.view.audio.player.durationChanged.connect(self._duration_changed)
         self.view.audio.player.errorOccurred.connect(self._audio_error)
-        for button in self.view.buttons:
-            button.clicked.connect(self._soon)
+        self._originals: dict[str, str | list[int]] = {}
+        self._busy = False
+        self.view.soap.sources_changed.connect(self._update_actions)
+        self.view.save.clicked.connect(self._save)
+        self.view.approve.clicked.connect(self._approve)
+        self.view.delete.clicked.connect(self._delete)
+        self.view.export.clicked.connect(self._soon)
 
     def on_open(self, **params: Any) -> None:
         """Start all four facade requests and remember this review's timestamp.
@@ -70,6 +76,8 @@ class SessionScreen(BaseScreen):
         self.session_id = params["session_id"]
         self._requested_source = params.get("source_segment_id")
         self.review_started_at = datetime.now()
+        self._originals.clear()
+        self._busy = False
         self._data.clear()
         self._errors.clear()
         self._segments.clear()
@@ -135,13 +143,7 @@ class SessionScreen(BaseScreen):
             number=soap["number"], date=soap["date"]))
         self.view.crumb.set_path([S.NAV_PATIENTS, soap["patient_name"],
                                   S.SESSION_CRUMB.format(number=soap["number"])])
-        text, variant = badge_for(soap.get("badge"))
-        self.view.badge.setText(text)
-        self.view.badge.set_variant(variant)
-        self.view.badge.setVisible(bool(text))
-        self.view.soap.set_soap(soap)
-        self.view.save.setVisible(bool(soap["editable"]))
-        self.view.approve.setVisible(bool(soap["editable"]))
+        self._render_soap(soap)
         self._segments = sorted(cast(list[Segment], self._data.get("transcript") or []),
                                 key=lambda s: s["start"])
         self.view.transcript.set_segments(self._segments)
@@ -174,6 +176,128 @@ class SessionScreen(BaseScreen):
             segment_id, self._requested_source = self._requested_source, None
             self.view._show_source(segment_id)
             self._source_clicked(segment_id)
+
+    def _render_soap(self, soap: dict[str, Any]) -> None:
+        self._data["soap"] = soap
+        text, variant = badge_for(soap.get("badge"))
+        self.view.badge.setText(text)
+        self.view.badge.set_variant(variant)
+        self.view.badge.setVisible(bool(text))
+        self.view.soap.setEnabled(True)
+        self.view.soap.set_soap(soap)
+        self.view.save.setVisible(bool(soap["editable"]))
+        self.view.approve.setVisible(bool(soap["editable"]))
+        self._originals = {path: editor.toPlainText()
+                           for path, editor in self.view.soap.editors.items()}
+        self._originals["subjective.source_segments"] = self._source_ids()
+        for editor in self.view.soap.editors.values():
+            editor.textChanged.connect(self._update_actions)
+        self._update_actions()
+
+    def _source_ids(self) -> list[int]:
+        return [source["segment_id"] for source in self.view.soap.sources["subjective"]]
+
+    def _edits(self) -> list[dict[str, Any]]:
+        edits = []
+        for path, editor in self.view.soap.editors.items():
+            text = editor.toPlainText()
+            if text != self._originals[path]:
+                edits.append({"path": path, "new_value": text})
+        ids = self._source_ids()
+        if ids != self._originals["subjective.source_segments"]:
+            edits.append({"path": "subjective.source_segments", "new_value": ids})
+        return edits
+
+    def _update_actions(self) -> None:
+        editable = self._data["soap"]["editable"]
+        variant = "dirty" if editable and self._edits() else "clean"
+        if self.view.save.property("variant") != variant:
+            set_variant(self.view.save, variant)
+        self.view.save.setEnabled(editable and not self._busy)
+        self.view.approve.setEnabled(editable and not self._busy)
+        self.view.delete.setEnabled(not self._busy)
+
+    def _confirm(self, title: str, message: str, destructive: bool = False) -> bool:
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(title)
+        dialog.setText(message.format(number=self._data["soap"]["number"]))
+        dialog.setIcon(QMessageBox.Icon.Warning if destructive else QMessageBox.Icon.Question)
+        role = QMessageBox.ButtonRole
+        if destructive:
+            accept = dialog.addButton(S.SOURCE_REMOVE, role.DestructiveRole)
+            accept.setObjectName("DeleteText")
+        else:
+            accept = dialog.addButton(title, role.AcceptRole)
+        cancel = dialog.addButton(S.CANCEL, role.RejectRole)
+        dialog.setDefaultButton(cancel)
+        dialog.setEscapeButton(cancel)
+        dialog.exec()
+        return dialog.clickedButton() is accept
+
+    def _request(self, fn, *args, success, failure=None) -> None:
+        generation = self._generation
+        self._busy = True
+        self._update_actions()
+
+        def complete(callback, result):
+            if not self._active or generation != self._generation:
+                return
+            self._busy = False
+            callback(result)
+            if self._active and generation == self._generation:
+                self._update_actions()
+
+        self.call(fn, *args, on_success=partial(complete, success),
+                  on_error=partial(complete, failure or self._action_error))
+
+    def _action_error(self, error: BaseException) -> None:
+        self._toast(str(error) or S.ERROR_GENERIC)
+
+    def _save(self) -> None:
+        edits = self._edits()
+        if self._busy:
+            return
+        if not edits:
+            self._toast(S.SESSION_NO_EDITS)
+            return
+
+        def saved(_result):
+            self._originals.update((edit["path"], edit["new_value"]) for edit in edits)
+            self._toast(S.SESSION_SAVED)
+
+        self._request(self.facade.save_soap, self.session_id, edits,
+                      self.review_started_at, success=saved)
+
+    def _approve(self) -> None:
+        if self._busy or not self._confirm(S.SESSION_APPROVE, S.SESSION_CONFIRM_APPROVE):
+            return
+        # Freeze the submitted note through approval and the authoritative reread.
+        self.view.soap.setEnabled(False)
+
+        def rejected(error):
+            self.view.soap.setEnabled(True)
+            self._action_error(error)
+
+        def approved(_result):
+            self._request(self.facade.get_soap, self.session_id, success=self._render_soap,
+                          failure=self._refresh_failed)
+
+        self._request(self.facade.approve_soap, self.session_id, self._edits(),
+                      self.review_started_at, success=approved, failure=rejected)
+
+    def _refresh_failed(self, error: BaseException) -> None:
+        self.view.set_state("error", S.SESSION_REOPEN_APPROVED)
+        self._action_error(error)
+
+    def _delete(self) -> None:
+        if self._busy or not self._confirm(S.SESSION_DELETE, S.SESSION_CONFIRM_DELETE, True):
+            return
+
+        def deleted(_result):
+            self._toast(S.SESSION_DELETED)
+            self.router.back()
+
+        self._request(self.facade.delete_session, self.session_id, success=deleted)
 
     def _audio_error(self, error: QMediaPlayer.Error, message: str) -> None:
         """Disable waveform navigation if decoding the selected file fails."""
