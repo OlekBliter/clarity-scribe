@@ -123,6 +123,9 @@ class MedicalCardScreen(BaseScreen):
                     field["sources"] = deepcopy(self._source_edits[field["field_id"]])
                     field["edited_by_doctor"] = True
                 if field["field_id"] in draft:
+                    if field["state"] != "attention":
+                        field["state"] = "normal"
+                    field["contradiction_text"] = None
                     field["value"] = draft[field["field_id"]]
                     field["edited_by_doctor"] = True
             for key, value in draft.items():
@@ -268,9 +271,6 @@ class MedicalCardScreen(BaseScreen):
         evidence = {key: [s["segment_id"] for s in sources] for key, sources in self._source_edits.items()}
         action = self.facade.approve_card if approve else self.facade.save_card
         if contacts or evidence:
-            if not getattr(self.facade, "supports_card_details", False):
-                toast(S.MEDCARD_DETAILS_UNSUPPORTED)
-                return
             action = partial(action, contacts=contacts, evidence=evidence)
         if approve:
             box = QMessageBox(self)
@@ -283,6 +283,7 @@ class MedicalCardScreen(BaseScreen):
             box.exec()
             if box.clickedButton() is not yes:
                 return
+        position = self._scroll.verticalScrollBar().value()
         generation = self._request_id
         self._busy = True
         self._update_actions()
@@ -298,24 +299,21 @@ class MedicalCardScreen(BaseScreen):
                 return
             self._drafts.clear()
             self._source_edits.clear()
-            if approve:
-                self.save.hide()
-                self.approve.hide()
-                self._scroll.hide()
-                self._status.setText(S.MEDCARD_LOADING)
-                self._status.show()
-                self.call(self.facade.get_card, self._patient_id, on_success=reloaded,
-                          on_error=lambda err: self._failed(err, self._patient_id, generation))
-            else:
-                self._original = deepcopy(self._data)
-                self._busy = False
-                self._update_actions()
+            if not approve:
                 toast(S.MEDCARD_SAVED)
+            self.save.hide()
+            self.approve.hide()
+            self._scroll.hide()
+            self._status.setText(S.MEDCARD_LOADING)
+            self._status.show()
+            self.call(self.facade.get_card, self._patient_id, on_success=reloaded,
+                      on_error=lambda err: self._failed(err, self._patient_id, generation))
 
         def reloaded(card):
             if self._current(generation):
                 self._busy = False
                 self._render_current(card, generation)
+                self._scroll.verticalScrollBar().setValue(position)
 
         self.call(action, self._patient_id, edits, self.review_started_at,
                   on_success=saved, on_error=failed)

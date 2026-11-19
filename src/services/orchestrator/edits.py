@@ -127,12 +127,15 @@ def apply_card_edits(data: dict[str, Any] | MedicalCardData, edits: Iterable[Edi
         elif path == "hypotheses.risk" and value not in RISK_VALUES:
             raise DoctorInputError(SAVE_FAILED)
 
+        if path not in BOOL_FIELDS and path != "hypotheses.risk" and (value is None or not value.strip()):
+            value = "-"
+
         field = fields.get(path)
         if field is not None:
             field.value = value
             field.edited_by_doctor = True
             # A doctor-provided value resolves "not discussed" / "contradictory".
-            if field.status in ("not_discussed", "contradictory") and value != "":
+            if field.status in ("not_discussed", "contradictory") and value not in (None, ""):
                 field.status = "filled"
         else:
             field = CardField(

@@ -172,8 +172,16 @@ class CardPanel(QFrame):
                 value = editor.toPlainText()
                 if value == (original or ""):
                     continue
+                if (not value.strip() and key.startswith("contacts.")
+                        and not key.startswith("contacts.emergency_")):
+                    if not (original or "").strip():
+                        continue
+                    editor.setFocus()
+                    self.window().toast.show_message(
+                        S.MEDCARD_CONTACT_REQUIRED.format(field=field["title"]))
+                    return
                 if not value.strip():
-                    value = None
+                    value = None if key.startswith("contacts.") else "-"
             if value != original:
                 changes[key] = value
         if self in self.parentWidget()._panels:
