@@ -67,12 +67,17 @@ def _build_doctor_command(
     action: Literal["edit", "approve"],
     edits: list[dict[str, Any]],
     review_started_at: datetime,
+    *,
+    contacts: dict[str, Any] | None = None,
+    evidence: dict[str, list[Any]] | None = None,
 ) -> DoctorCommand:
     return DoctorCommand(
         target=target,
         id=entity_id,
         action=action,
         edits=[Edit(path=edit["path"], new_value=edit["new_value"]) for edit in edits],
+        contacts={} if contacts is None else contacts,
+        evidence={} if evidence is None else evidence,
         review_started_at=review_started_at,
         at=datetime.now(review_started_at.tzinfo),
     )
@@ -349,15 +354,37 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         return build_card_view(card, patient, segments, first_session["session_date"])
 
     @_guard
-    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
+    def save_card(
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[Any]] | None = None,
+    ) -> None:
         """Save the doctor's card edits without approving."""
-        cmd = _build_doctor_command("card", patient_id, "edit", edits, review_started_at)
+        cmd = _build_doctor_command(
+            "card", patient_id, "edit", edits, review_started_at,
+            contacts=contacts, evidence=evidence,
+        )
         self._o.apply_doctor_command(cmd)
 
     @_guard
-    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
+    def approve_card(
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[Any]] | None = None,
+    ) -> None:
         """Save the doctor's card edits and approve the card."""
-        cmd = _build_doctor_command("card", patient_id, "approve", edits, review_started_at)
+        cmd = _build_doctor_command(
+            "card", patient_id, "approve", edits, review_started_at,
+            contacts=contacts, evidence=evidence,
+        )
         self._o.apply_doctor_command(cmd)
 
     # ------------------------------------------------------------------ dynamics

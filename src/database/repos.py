@@ -645,6 +645,7 @@ class MedicalCardsRepo:
                         "field_id": field.field_id,
                         "status": field.status,
                         "value": field.value,
+                        "evidence": field.evidence,
                         "edited_by_doctor": False,
                     }
                     for field in restored_model.fields
