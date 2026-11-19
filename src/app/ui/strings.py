@@ -350,3 +350,33 @@ PROFILE_DELETE_TEXT = (
 PROFILE_DELETE_CONFIRM = "Видалити"
 PROFILE_DELETED_TOAST = "Пацієнта видалено"
 PROFILE_SESSIONS_EMPTY = "Сесій ще немає"
+
+# PDF export
+PDF_SAVE_TITLE = "Зберегти PDF"
+PDF_FILTER = "PDF (*.pdf)"
+PDF_SOAP_NAME = "SOAP_{name}_сесія{number}.pdf"
+PDF_WRITE_ERROR = "Не вдалося записати PDF. Перевірте доступ до папки та чи не відкрито файл в іншій програмі. {error}"
+PDF_EXPORT_ERROR = "Не вдалося створити PDF: {error}"
+PDF_SOAP_TITLE = "SOAP-нотатка"
+PDF_CARD_TITLE = "Медична картка"
+PDF_DYNAMICS_TITLE = "Динаміка стану"
+PDF_PATIENT = "ПАЦІЄНТ"
+PDF_SESSION = "СЕСІЯ"
+PDF_DATE = "ДАТА"
+PDF_STATUS = "Статус"
+PDF_MISSING = "—"
+PDF_PAGE = "Стор. {page} / {total}"
+PDF_DOCTOR = "ЛІКАР: ____________________"
+PDF_SIGNATURE = "ПІДПИС: ____________________"
+PDF_SECTIONS = (("subjective", "S", "Суб’єктивний стан", "Subjective"),
+                ("objective", "O", "Об’єктивні дані", "Objective"),
+                ("assessment", "A", "Оцінка та динаміка", "Assessment"),
+                ("plan", "P", "Терапевтичний план", "Plan"))
+PDF_BIOMARKERS = "Біомаркери"
+PDF_METRIC_HEADERS = ("Назва", "Значення", "Базове значення", "Напрямок")
+PDF_DIRECTIONS = {"up": "Зростання ↑", "down": "Зниження ↓", "stable": "Без змін →"}
+PDF_SOURCES = "ДЖЕРЕЛА"
+PDF_CONTACTS = "Контактні дані"
+PDF_VALUE = "Значення"
+PDF_NO_GUI = "Для експорту потрібен запущений QApplication."
+PDF_WRITE_FAILED = "Помилка запису PDF."
