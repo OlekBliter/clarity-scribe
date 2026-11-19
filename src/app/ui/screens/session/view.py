@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractButton, QBoxLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QSplitter,
-    QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 from src.app.ui import metrics as M, strings as S
 from src.app.ui.widgets.action_icon import ActionIcon
@@ -65,8 +65,11 @@ class SessionView(QWidget):
         self.title.setTextFormat(Qt.TextFormat.PlainText)
         self.badge = Badge()
         # Header actions: destructive and export live top-right, like the medical card.
-        self.delete = ActionIcon("trash", S.SESSION_DELETE)
-        self.delete.setProperty("danger", "true")
+        self.delete = QPushButton(S.SOURCE_REMOVE, self)
+        self.delete.setObjectName("DeleteText")
+        self.delete.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete.setToolTip(S.SESSION_DELETE)
+        self.delete.setAccessibleName(S.SESSION_DELETE)
         self.export = outline_button(S.SESSION_EXPORT)
         self.top_actions = QWidget()
         top_actions = QHBoxLayout(self.top_actions)
@@ -160,6 +163,7 @@ class SessionView(QWidget):
 
         # Footer: same order and styles as the medical card (outline, then primary).
         self.save = outline_button(S.SESSION_SAVE)
+        self.save.setObjectName("SessionSave")
         self.approve = primary_button(S.SESSION_APPROVE)
         self.action_bar = QWidget()
         actions = self._actions = QBoxLayout(QBoxLayout.Direction.LeftToRight, self.action_bar)
