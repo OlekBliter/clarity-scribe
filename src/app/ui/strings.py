@@ -427,3 +427,8 @@ SESSION_ROW_DELETE_TITLE = "Видалити сесію"
 SESSION_ROW_DELETE_TEXT = "Видалити сесію №{number} від {date}? Цю дію неможливо скасувати."
 PROFILE_ADD_FIRST_SESSION_BUTTON = "Додати першу сесію"
 MEDCARD_PANEL_CANCEL = "Скасувати зміни"
+
+DYNAMICS_RANGE = "{first}–{last}"
+DYNAMICS_WINDOW_NOTE = "На графіках показано останні {count} сесій"
+DYNAMICS_EXPAND = "Показати всі сесії"
+TREND_HISTORY_CLOSE = "Закрити"

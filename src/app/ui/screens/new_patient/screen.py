@@ -158,9 +158,8 @@ class NewPatientScreen(BaseScreen):
         self.emerg_consent_check = QCheckBox(strings.NEW_PATIENT_EMERG_CONSENT)
         self.emerg_consent_check.setMinimumHeight(metrics.CHECKBOX_MIN_HEIGHT)
         self._add(col, "emerg_consent", None, self.emerg_consent_check,
-                  lambda: (strings.VALIDATION_CONSENT
-                           if self._emerg_active() and not self.emerg_consent_check.isChecked()
-                           else None))
+                  lambda: validation.validate_consent(
+                      self._emerg_active(), self.emerg_consent_check.isChecked()))
         return card
 
     # ------------------------------------------------------------ правила

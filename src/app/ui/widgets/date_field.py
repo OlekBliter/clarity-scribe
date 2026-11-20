@@ -25,7 +25,7 @@ from src.app.ui import metrics, strings
 
 _DISPLAY_FORMAT = "dd.MM.yyyy"
 _ISO_FORMAT = "yyyy-MM-dd"
-_EMPTY_DATE = QDate(metrics.DATE_MIN_YEAR, 1, 1)  # мінімум = «порожньо»
+_EMPTY_DATE = QDate(metrics.DATE_MIN_YEAR, 1, 1).addDays(-1)  # мінімум = «порожньо»
 
 
 class _DateCalendar(QCalendarWidget):
@@ -63,6 +63,8 @@ class DateField(QDateEdit):
         calendar.setGridVisible(False)
         calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
+        cell_width = calendar.fontMetrics().horizontalAdvance("88") + metrics.SPACING
+        calendar.setMinimumWidth(max(calendar.sizeHint().width(), 7 * cell_width + 2 * metrics.CONTENT_MARGIN))
         self.setCalendarWidget(calendar)
 
     def has_value(self) -> bool:
