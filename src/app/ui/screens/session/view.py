@@ -13,6 +13,7 @@ from src.app.ui.widgets.badge import Badge
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
 from src.app.ui.widgets.card import Card
+from src.app.ui.widgets.row_menu import RowMenuButton
 from src.app.ui.widgets.skeleton import Skeleton
 from src.app.ui.widgets.transcript_view import TranscriptView
 from src.app.ui.widgets.waveform_widget import WaveformWidget
@@ -65,18 +66,15 @@ class SessionView(QWidget):
         self.title.setTextFormat(Qt.TextFormat.PlainText)
         self.badge = Badge()
         # Header actions: destructive and export live top-right, like the medical card.
-        self.delete = QPushButton(S.SOURCE_REMOVE, self)
-        self.delete.setObjectName("DeleteText")
-        self.delete.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.delete.setToolTip(S.SESSION_DELETE)
+        self.delete = RowMenuButton([], self)  # «⋯» із пунктом «Видалити» (дію задає екран)
         self.delete.setAccessibleName(S.SESSION_DELETE)
         self.export = outline_button(S.SESSION_EXPORT)
         self.top_actions = QWidget()
         top_actions = QHBoxLayout(self.top_actions)
         top_actions.setContentsMargins(0, 0, 0, 0)
         top_actions.setSpacing(M.SPACING)
-        top_actions.addWidget(self.delete)
         top_actions.addWidget(self.export)
+        top_actions.addWidget(self.delete)  # «⋯» крайня справа
         top = self._top = QGridLayout()
         top.setSpacing(M.SPACING)
         top.addWidget(self.back, 0, 0, Qt.AlignmentFlag.AlignVCenter)
