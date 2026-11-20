@@ -313,7 +313,7 @@ class ClarityScribeFacade(ABC):
         thread). Saves nothing; the key is never logged or returned.
 
         Args:
-            provider: Provider id: ``"gemini"`` or ``"groq"`` (case-insensitive).
+            provider: Provider id: ``"gemini"`` (case-insensitive).
             api_key: Key from the settings form. If empty, the saved key is
                 checked; without a saved key the result is ``ok=False``.
 

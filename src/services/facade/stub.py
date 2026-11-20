@@ -119,7 +119,7 @@ _SOAP_SEED = {
         ("Розглянути щоденний самоконтроль настрою та сну", "recommended"),
     ),
 }
-_LLM_PROVIDERS = frozenset({"gemini", "groq"})
+_LLM_PROVIDERS = frozenset({"gemini"})
 _SOAP_PATH_RE = re.compile(r"^(?:(subjective|objective|assessment)\.text|plan\[(\d+)\]\.text)$")
 
 
