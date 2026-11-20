@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from src.app.ui import metrics as M, strings as S, validation
 from src.app.ui.qt_helpers import fit_combo_popup
 from src.app.ui.widgets.buttons import secondary_button
+from src.app.ui.widgets.date_field import DateField
 from src.app.ui.widgets.form_field import FormField
 from src.app.ui.widgets.source_chip import SourceChip
 from src.app.ui.widgets.flow_layout import FlowLayout
@@ -27,18 +28,8 @@ def label(text: str, name: str = "Subtitle") -> QLabel:
     return result
 
 
-_BIRTH_FORMATS = ("yyyy-MM-dd", "dd.MM.yyyy")
 _EMERGENCY_TEXT = ("contacts.emergency_name", "contacts.emergency_relation",
                    "contacts.emergency_phone")
-
-
-def parse_birth(text: str) -> QDate | None:
-    """Дата з тексту (ISO або дд.мм.рррр); None, якщо не дата, з майбутнього або надто давня."""
-    for fmt in _BIRTH_FORMATS:
-        date = QDate.fromString(text.strip(), fmt)
-        if date.isValid() and M.DATE_MIN_YEAR <= date.year() and date <= QDate.currentDate():
-            return date
-    return None
 
 
 def value_text(value) -> str:
@@ -102,6 +93,14 @@ class CardPanel(QFrame):
                         editor.addItem(caption, code)
                     editor.setCurrentIndex(editor.findData(value) if value is not None else -1)
                     fit_combo_popup(editor)
+                elif key == "contacts.birth_date":
+                    editor = DateField(allow_empty=True)
+                    editor.setMaximumDate(QDate.currentDate())
+                    iso = validation.birth_date_iso(value)
+                    if iso:
+                        editor.setDate(QDate.fromString(iso, "yyyy-MM-dd"))
+                    elif value:
+                        editor.setSpecialValueText(str(value))
                 else:
                     editor = QPlainTextEdit()
                     editor.setPlainText("" if value is None else str(value))
@@ -192,9 +191,24 @@ class CardPanel(QFrame):
         return (any(self._text(key) for key in _EMERGENCY_TEXT)
                 or (isinstance(consent, QComboBox) and consent.currentData() is True))
 
+    def _emergency_changed(self):
+        for field in self._fields:
+            key = field["field_id"]
+            if key in _EMERGENCY_TEXT and self._text(key) != (field["value"] or "").strip():
+                return True
+            if key == "contacts.emergency_consent" and self.editors[key].currentData() != field["value"]:
+                return True
+        return False
+
     def _error_fn(self, key: str, editor, original):
         """Помилка поля. Незмінене значення не перевіряємо: старі дані не блокують вихід."""
         def error() -> str | None:
+            if isinstance(editor, DateField):
+                if validation.birth_date_iso(original) and not editor.has_value():
+                    return S.VALIDATION_DATE
+                return None
+            if key.startswith("contacts.emergency_") and not self._emergency_changed():
+                return None
             if isinstance(editor, QPlainTextEdit):
                 text = editor.toPlainText()
                 unchanged = text == ("" if original is None else str(original))
@@ -204,14 +218,13 @@ class CardPanel(QFrame):
                     return None
                 return self._text_error(key, text)
             if key == "contacts.emergency_consent" and self._emergency_active():
-                return None if editor.currentData() is True else S.VALIDATION_CONSENT
+                return validation.validate_consent(True, editor.currentData() is True)
             return None
         return error
 
     def _text_error(self, key: str, text: str) -> str | None:
         if not key.startswith("contacts."):
-            return (S.VALIDATION_MAX_LEN.format(max=M.MEDCARD_TEXT_MAX_LEN)
-                    if len(text) > M.MEDCARD_TEXT_MAX_LEN else None)
+            return validation.validate_clinical_text(text)
         if key in _EMERGENCY_TEXT and not text.strip():
             return S.VALIDATION_REQUIRED if self._emergency_active() else None
         checks = {
@@ -223,8 +236,6 @@ class CardPanel(QFrame):
             "contacts.emergency_relation": validation.validate_other,
             "contacts.emergency_phone": validation.validate_phone,
         }
-        if key == "contacts.birth_date":
-            return None if parse_birth(text) else S.VALIDATION_BIRTH_FORMAT
         return checks[key](text) if key in checks else None
 
     def _refresh_forms(self) -> None:
@@ -247,7 +258,11 @@ class CardPanel(QFrame):
             editor = self.editors.get(key)
             if editor is None:
                 continue
-            if isinstance(editor, QComboBox):
+            if isinstance(editor, DateField):
+                value = editor.iso()
+                if value == validation.birth_date_iso(original):
+                    continue
+            elif isinstance(editor, QComboBox):
                 if editor.currentIndex() < 0:
                     continue
                 value = editor.currentData()
@@ -259,8 +274,6 @@ class CardPanel(QFrame):
                     value = None if key.startswith("contacts.") else "-"
                 elif key == "contacts.phone" or key == "contacts.emergency_phone":
                     value = validation.normalize_phone(value) or value
-                elif key == "contacts.birth_date":
-                    value = parse_birth(value).toString("yyyy-MM-dd")
                 elif key.startswith("contacts."):
                     value = validation.collapse_spaces(value)
             if value != original:

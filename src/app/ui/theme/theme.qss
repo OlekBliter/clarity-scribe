@@ -860,3 +860,21 @@ QPushButton#SessionSave[variant="clean"] {
     border-color: #CBD5E1;
 }
 QPushButton#SessionSave[variant="dirty"]:hover { background-color: #F0FDFA; }
+
+QFrame#TrendOverlay {
+    background-color: rgba(15, 23, 42, 110);
+}
+QFrame#TrendHistory {
+    border: 1px solid #CBD5E1;
+    border-radius: 14px;
+    background-color: #F4F8F9;
+}
+QFrame#TrendPlotCard {
+    background-color: white;
+    border: 1px solid #D3E3E4;
+    border-top: 3px solid #0D9488;
+    border-radius: 14px;
+}
+QFrame#TrendPlotCard QScrollArea, QFrame#TrendPlotCard QScrollArea > QWidget > QWidget {
+    background-color: white;
+}

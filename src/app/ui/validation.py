@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+from datetime import date, datetime
 import re
 
 from src.app.ui import metrics, strings
@@ -61,3 +62,24 @@ def validate_email(text: str) -> str | None:
     if not value:
         return strings.VALIDATION_REQUIRED
     return None if _EMAIL_RE.match(value) else strings.VALIDATION_EMAIL
+
+
+def birth_date_iso(value: str | None) -> str | None:
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            born = datetime.strptime((value or "").strip(), fmt).date()
+        except ValueError:
+            continue
+        if born.year >= metrics.DATE_MIN_YEAR and born <= date.today():
+            return born.isoformat()
+    return None
+
+
+def validate_clinical_text(text: str) -> str | None:
+    if len(text) > metrics.MEDCARD_TEXT_MAX_LEN:
+        return strings.VALIDATION_MAX_LEN.format(max=metrics.MEDCARD_TEXT_MAX_LEN)
+    return None
+
+
+def validate_consent(active: bool, consent: bool) -> str | None:
+    return strings.VALIDATION_CONSENT if active and not consent else None

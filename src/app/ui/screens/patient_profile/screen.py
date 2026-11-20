@@ -23,17 +23,15 @@ from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
 from src.app.ui.widgets.card import ListItemCard
 from src.app.ui.widgets.confirm import confirm_destructive
-from src.app.ui.widgets.row_menu import RowMenuButton
 from src.app.ui.widgets.skeleton import Skeleton
 
 
 class PatientProfileScreen(BaseScreen):
-    """Екран профілю пацієнта: контакти, список сесій і дії (додати сесію, медкартка, динаміка, видалення)."""
+    """Екран профілю пацієнта: контакти, список сесій і дії (додати сесію, медкартка, динаміка)."""
 
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._patient_id: str | None = None
-        self._patient_name: str = ""
         self._has_card: bool | None = None
         self._has_dynamics: bool | None = None
         self._request_id = 0
@@ -65,15 +63,12 @@ class PatientProfileScreen(BaseScreen):
         self._add = primary_button(strings.PROFILE_ADD_SESSION_BUTTON)
         self._card = outline_button(strings.PROFILE_CARD)
         self._dynamics = outline_button(strings.PROFILE_DYNAMICS)
-        # Видалення пацієнта: «⋯» крайня справа з єдиним пунктом «Видалити»
-        self._delete = RowMenuButton([(strings.ROW_MENU_DELETE, self._confirm_delete)])
         self._add.clicked.connect(lambda *_: self.router.go(Route.ADD_SESSION, patient_id=self._patient_id))
         self._card.clicked.connect(self._open_card)
         self._dynamics.clicked.connect(self._open_dynamics)
         for btn in (self._add, self._card, self._dynamics):
             actions.addWidget(btn)
         actions.addStretch(1)
-        actions.addWidget(self._delete)
         root.addLayout(actions)
 
         heading = QLabel(strings.PROFILE_SESSIONS)
@@ -93,7 +88,6 @@ class PatientProfileScreen(BaseScreen):
     def on_open(self, **params: Any) -> None:
         """Завантажує профіль пацієнта; застарілі відповіді відсікаються за номером запиту."""
         self._patient_id = params["patient_id"]
-        self._patient_name = ""
         self._has_card = None
         self._has_dynamics = None
         self._request_id += 1
@@ -114,7 +108,6 @@ class PatientProfileScreen(BaseScreen):
         self._contacts.setVisible(False)
         self._card.setEnabled(False)
         self._dynamics.setEnabled(False)
-        self._delete.setEnabled(False)
         clear_layout(self._sessions)
         for _ in range(metrics.PROFILE_SKELETON_COUNT):
             self._sessions.addWidget(
@@ -135,7 +128,6 @@ class PatientProfileScreen(BaseScreen):
     def _render(self, profile: dict) -> None:
         """Малює заголовок, контакти, доступність кнопок і список сесій (або порожній стан)."""
         name = profile.get("name") or strings.NO_NAME
-        self._patient_name = name
         self._crumb.set_path([strings.NAV_PATIENTS, name])
         self._title.setText(name)
         self._contacts.setText(profile["contacts_line"])
@@ -144,7 +136,6 @@ class PatientProfileScreen(BaseScreen):
         self._has_dynamics = bool(profile["has_dynamics"])
         self._card.setEnabled(self._has_card)
         self._dynamics.setEnabled(self._has_dynamics)
-        self._delete.setEnabled(True)
 
         clear_layout(self._sessions)
         if not profile["sessions"]:
@@ -201,32 +192,3 @@ class PatientProfileScreen(BaseScreen):
             self.router.go(Route.SESSION, patient_id=self._patient_id, session_id=session["session_id"])
         else:
             self.router.go(Route.ADD_SESSION, patient_id=self._patient_id, session_id=session["session_id"])
-
-    def _confirm_delete(self) -> None:
-        """Просить підтвердження й видаляє пацієнта через фасад."""
-        if self._patient_id is None:
-            return
-        if not confirm_destructive(
-            self, strings.PROFILE_DELETE_TITLE,
-            strings.PROFILE_DELETE_TEXT.format(name=self._patient_name),
-            strings.PROFILE_DELETE_CONFIRM,
-        ):
-            return
-
-        self._delete.setEnabled(False)
-        self.call(
-            self.facade.delete_patient,
-            self._patient_id,
-            on_success=self._on_deleted,
-            on_error=self._on_delete_error,
-        )
-
-    def _on_deleted(self, _result: Any = None) -> None:
-        """Повідомляє про видалення й повертає до списку пацієнтів."""
-        self.window().toast.show_message(strings.PROFILE_DELETED_TOAST)
-        self.router.go_root(Route.PATIENTS)
-
-    def _on_delete_error(self, error: Exception) -> None:
-        """Показує помилку Toast-ом і знову вмикає кнопку «Видалити»."""
-        show_error(self, error)
-        self._delete.setEnabled(True)
