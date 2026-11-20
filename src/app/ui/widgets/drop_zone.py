@@ -2,14 +2,17 @@
 
 Сигнали:
     file_selected(path)   файл обрано (шлях до файла)
-    file_cleared()        лікар натиснув «Скасувати»
+    file_cleared()        лікар натиснув «Видалити»
+
+Зона підсвічується лише коли над нею тягнуть файл. Коли файл додано, вона
+стає компактною карткою (ім'я, мета-рядок, «Видалити»); другий файл додати не
+можна (ні перетягуванням, ні кнопкою): спершу «Видалити».
     file_rejected(text)   файл не підходить (текст для Toast)
 
 Окремий запуск для перегляду:  python -m src.app.ui.widgets.drop_zone
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -17,9 +20,7 @@ from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QVBoxLay
 
 from src.app.ui import metrics, strings
 from src.app.ui.qt_helpers import repolish
-from src.app.ui.widgets.buttons import outline_button, secondary_button
-
-_BYTES_IN_MB = 1024 * 1024
+from src.app.ui.widgets.buttons import danger_button, outline_button
 
 
 class DropZone(QFrame):
@@ -33,37 +34,46 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self._extensions = tuple(e.lower() for e in extensions)
         self._path: str | None = None
+        self._match_height = 0  # вирівнювання за висотою сусідньої картки
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(*(metrics.CARD_PADDING,) * 4)
         layout.setSpacing(metrics.SPACING)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        title = QLabel(strings.DROPZONE_TITLE)
-        title.setObjectName("CardTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint = QLabel(strings.DROPZONE_HINT)
-        hint.setObjectName("Muted")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        layout.addWidget(hint)
+        # Порожній стан: велика пунктирна зона з підказкою й кнопкою (по центру)
+        layout.addStretch(1)
+        self._title = QLabel(strings.DROPZONE_TITLE)
+        self._title.setObjectName("CardTitle")
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._hint = QLabel(strings.DROPZONE_HINT)
+        self._hint.setObjectName("Muted")
+        self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._pick = outline_button(strings.DROPZONE_BUTTON)
+        self._pick.clicked.connect(self._choose_file)
+        layout.addWidget(self._title)
+        layout.addWidget(self._hint)
+        layout.addWidget(self._pick, alignment=Qt.AlignmentFlag.AlignCenter)
 
+        # Стан «файл додано»: компактна картка «ім'я + розмір · тривалість · мова | Видалити»
         self._file_row = QWidget()
         row = QHBoxLayout(self._file_row)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._chip = QLabel()
-        self._chip.setObjectName("FileChip")
-        clear_btn = secondary_button(strings.DROPZONE_CLEAR)
+        row.setSpacing(metrics.SPACING)
+        text = QVBoxLayout()
+        text.setSpacing(metrics.SPACING_SMALL)
+        self._file_name = QLabel()
+        self._file_name.setObjectName("CardTitle")
+        self._file_meta = QLabel()
+        self._file_meta.setObjectName("Muted")
+        text.addWidget(self._file_name)
+        text.addWidget(self._file_meta)
+        clear_btn = danger_button(strings.DROPZONE_CLEAR)
         clear_btn.clicked.connect(self.clear)
-        row.addWidget(self._chip)
-        row.addWidget(clear_btn)
-        self._file_row.hide()
+        row.addLayout(text, stretch=1)
+        row.addWidget(clear_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._file_row)
-
-        pick = outline_button(strings.DROPZONE_BUTTON)
-        pick.clicked.connect(self._choose_file)
-        layout.addWidget(pick, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch(1)
+        self._show_empty_state()
 
     # ---- публічне API ----
     @property
@@ -74,15 +84,50 @@ class DropZone(QFrame):
         if self._path is None:
             return
         self._path = None
-        self._file_row.hide()
+        self._show_empty_state()
         self.file_cleared.emit()
+
+    def set_meta(self, text: str) -> None:
+        """Другий рядок картки файла (розмір, тривалість, мова); задає екран."""
+        self._file_meta.setText(text)
+
+    def match_height(self, height: int) -> None:
+        """Мінімальна висота зони (напр. як у картки «Обробка запису» поруч); 0 = вимкнено."""
+        self._match_height = height
+        self._apply_min_height()
+
+    def _apply_min_height(self) -> None:
+        own = 0 if self._path else metrics.DROPZONE_MIN_HEIGHT
+        self.setMinimumHeight(max(own, self._match_height))
+
+    def _set_filled(self, filled: bool) -> None:
+        self.setProperty("filled", "true" if filled else "false")
+        self._apply_min_height()
+        repolish(self)
+
+    def _show_empty_state(self) -> None:
+        self._title.show()
+        self._hint.show()
+        self._pick.show()
+        self._file_row.hide()
+        self._set_filled(False)
+        self._set_drag_active(False)
+
+    def _show_file_state(self) -> None:
+        self._title.hide()
+        self._hint.hide()
+        self._pick.hide()
+        self._file_name.setText(Path(self._path).name if self._path else "")
+        self._file_meta.setText("")
+        self._file_row.show()
+        self._set_filled(True)
 
     # ---- вибір файла ----
     def _choose_file(self) -> None:
         masks = " ".join(f"*{ext}" for ext in self._extensions)
         path, _ = QFileDialog.getOpenFileName(
             self, strings.DROPZONE_DIALOG_TITLE, "", f"{strings.DROPZONE_FILTER} ({masks})")
-        if path:
+        if path and self._path is None:
             self._accept(path)
 
     def _accept(self, path: str) -> bool:
@@ -91,9 +136,7 @@ class DropZone(QFrame):
                 strings.DROPZONE_BAD_TYPE.format(types=", ".join(self._extensions)))
             return False
         self._path = path
-        size_mb = os.path.getsize(path) / _BYTES_IN_MB if os.path.exists(path) else 0.0
-        self._chip.setText(strings.DROPZONE_FILE_FMT.format(name=Path(path).name, size_mb=size_mb))
-        self._file_row.show()
+        self._show_file_state()
         self.file_selected.emit(path)
         return True
 
@@ -104,7 +147,7 @@ class DropZone(QFrame):
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt API)
         urls = event.mimeData().urls()
-        if urls and urls[0].isLocalFile():
+        if self._path is None and urls and urls[0].isLocalFile():
             self._set_drag_active(True)
             event.acceptProposedAction()
         else:
@@ -117,7 +160,7 @@ class DropZone(QFrame):
     def dropEvent(self, event) -> None:  # noqa: N802 (Qt API)
         self._set_drag_active(False)
         urls = event.mimeData().urls()
-        if urls and urls[0].isLocalFile():
+        if self._path is None and urls and urls[0].isLocalFile():
             self._accept(urls[0].toLocalFile())
             event.acceptProposedAction()
 

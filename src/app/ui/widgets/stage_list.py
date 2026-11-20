@@ -72,6 +72,10 @@ class StageList(QFrame):
         self._error.setText(text or "")
         self._error.setVisible(bool(text))
 
+    def set_footer_visible(self, visible: bool) -> None:
+        """Підпис «Готову нотатку знайдете…» доречний лише поки обробка йде."""
+        self._footer.setVisible(visible and bool(self._footer.text()))
+
     def reset(self) -> None:
         self._rebuild([])
         self.set_error(None)

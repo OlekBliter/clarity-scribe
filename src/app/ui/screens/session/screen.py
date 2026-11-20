@@ -8,13 +8,14 @@ from typing import Any, cast
 
 from PySide6.QtGui import QHideEvent
 from PySide6.QtMultimedia import QMediaPlayer
-from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.app.ui import strings as S
 from src.app.ui.export_pdf import ask_save_path, export_soap
 from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Router
 from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import badge_for
+from src.app.ui.widgets.confirm import ask_confirm
 from src.app.ui.widgets.toast import Toast
 from src.app.ui.widgets.transcript_view import Segment
 from src.app.workers.waveform_worker import load_waveform
@@ -63,7 +64,7 @@ class SessionScreen(BaseScreen):
         self.view.soap.sources_changed.connect(self._update_actions)
         self.view.save.clicked.connect(self._save)
         self.view.approve.clicked.connect(self._approve)
-        self.view.delete.clicked.connect(self._delete)
+        self.view.delete.set_actions([(S.ROW_MENU_DELETE, self._delete)])
         self.view.export.clicked.connect(self._export)
 
     def on_open(self, **params: Any) -> None:
@@ -219,21 +220,8 @@ class SessionScreen(BaseScreen):
         self.view.delete.setEnabled(not self._busy)
 
     def _confirm(self, title: str, message: str, destructive: bool = False) -> bool:
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle(title)
-        dialog.setText(message.format(number=self._data["soap"]["number"]))
-        dialog.setIcon(QMessageBox.Icon.Warning if destructive else QMessageBox.Icon.Question)
-        role = QMessageBox.ButtonRole
-        if destructive:
-            accept = dialog.addButton(S.SOURCE_REMOVE, role.DestructiveRole)
-            accept.setObjectName("DeleteText")
-        else:
-            accept = dialog.addButton(title, role.AcceptRole)
-        cancel = dialog.addButton(S.CANCEL, role.RejectRole)
-        dialog.setDefaultButton(cancel)
-        dialog.setEscapeButton(cancel)
-        dialog.exec()
-        return dialog.clickedButton() is accept
+        return ask_confirm(self, title, message.format(number=self._data["soap"]["number"]),
+                           S.SOURCE_REMOVE if destructive else title, destructive=destructive)
 
     def _request(self, fn, *args, success, failure=None) -> None:
         generation = self._generation

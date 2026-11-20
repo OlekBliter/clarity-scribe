@@ -38,6 +38,17 @@ QDialog, QMessageBox {
     background-color: #FFFFFF;
 }
 
+/* Діалог підтвердження: прозоре вікно + заокруглена біла картка */
+QDialog#ConfirmDialog {
+    background: transparent;
+}
+
+QFrame#ConfirmCard {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 12px;
+}
+
 /* ===================================================================
    2. ЛЕЙБЛИ ТА ТЕКСТОВІ ЕЛЕМЕНТИ
    =================================================================== */
@@ -143,6 +154,15 @@ QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
     padding: 7px 11px;
 }
 
+/* Помилка валідації (property invalid ставить FormField) */
+QLineEdit[invalid="true"], QPlainTextEdit[invalid="true"], QComboBox[invalid="true"], QDateEdit[invalid="true"] {
+    border: 1px solid #B91C1C;
+}
+QLineEdit[invalid="true"]:focus, QPlainTextEdit[invalid="true"]:focus, QComboBox[invalid="true"]:focus, QDateEdit[invalid="true"]:focus {
+    border: 2px solid #B91C1C;
+    padding: 7px 11px;
+}
+
 QComboBox::drop-down {
     border: none;
     width: 24px;
@@ -236,8 +256,16 @@ QPushButton#OutlineButton, QPushButton#SessionSave, QPushButton#DeleteText {
     font-weight: 500;
 }
 
+QPushButton#SecondaryButton:pressed {
+    background-color: #CBD5E1;
+}
+
 QPushButton#OutlineButton:hover {
     background-color: #F0FDFA;
+}
+
+QPushButton#OutlineButton:pressed {
+    background-color: #CCFBF1;
 }
 
 QPushButton#DangerButton {
@@ -254,7 +282,15 @@ QPushButton#DangerButton:hover {
     border-color: #F87171;
 }
 
-QPushButton:disabled {
+QPushButton#DangerButton:pressed {
+    background-color: #FEE2E2;
+}
+
+/* Вимкнена кнопка не реагує на наведення: правила з id мають вищу специфічність,
+   тому :disabled повторено для кожного виду (інакше hover «оживляє» кнопку). */
+QPushButton:disabled,
+QPushButton#PrimaryButton:disabled, QPushButton#SecondaryButton:disabled,
+QPushButton#OutlineButton:disabled, QPushButton#DangerButton:disabled {
     background-color: #E2E8F0;
     color: #94A3B8;
     border-color: #E2E8F0;
@@ -348,11 +384,6 @@ QFrame#DropZone {
     background-color: #FFFFFF;
     border: 2px dashed #CBD5E1;
     border-radius: 12px;
-}
-
-QFrame#DropZone:hover {
-    border-color: #0D9488;
-    background-color: #F0FDFA;
 }
 
 /* ===================================================================
@@ -742,17 +773,29 @@ QLabel#DynamicsPointBubble {
 /* ===================================================================
    17. ЗОНА: ПАЦІЄНТИ, ПРОФІЛЬ, ДОДАТИ СЕСІЮ          (Лідер)
    =================================================================== */
+/* Файл додано: суцільна компактна картка замість пунктирної зони */
+QFrame#DropZone[filled="true"] {
+    border: 1px solid #E2E8F0;
+}
+
 QFrame#DropZone[dragActive="true"] {
     border-color: #0D9488;
     background-color: #F0FDFA;
 }
 
-QLabel#FileChip {
-    background-color: #F1F5F9;
-    color: #0F172A;
+/* Меню дій рядка («⋯»): пункти червоні, бо всі вони незворотні */
+QMenu#RowMenu {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
     border-radius: 10px;
-    padding: 4px 12px;
+    padding: 4px;
 }
+QMenu#RowMenu::item {
+    color: #B91C1C;
+    padding: 8px 18px;
+    border-radius: 6px;
+}
+QMenu#RowMenu::item:selected { color: #991B1B; background: #FEE2E2; }
 
 QLabel#ErrorText {
     color: #B91C1C;

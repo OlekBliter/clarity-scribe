@@ -8,6 +8,11 @@
 Вигляд календаря задається в theme.qss (QDateEdit#DateField, QCalendarWidget#DateCalendar).
 Колір вихідних береться з QSS: QDateEdit#DateField { qproperty-weekendColor: #94A3B8; }
 
+Порожнє значення (для обов'язкових дат без «сьогодні» за замовчуванням):
+    DateField(allow_empty=True)   # показує «дд.мм.рррр», has_value() == False
+    field.clear_value()           # повернути в порожній стан
+Календар відкривається на сторінці «років тому» (метрика DATE_BIRTH_PAGE_YEARS).
+
 Окремий запуск:  python -m src.app.ui.widgets.date_field
 """
 from __future__ import annotations
@@ -16,18 +21,42 @@ from PySide6.QtCore import Property, QDate, QLocale, Qt
 from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import QCalendarWidget, QDateEdit
 
+from src.app.ui import metrics, strings
+
 _DISPLAY_FORMAT = "dd.MM.yyyy"
+_ISO_FORMAT = "yyyy-MM-dd"
+_EMPTY_DATE = QDate(metrics.DATE_MIN_YEAR, 1, 1)  # мінімум = «порожньо»
+
+
+class _DateCalendar(QCalendarWidget):
+    """Календар, який для порожнього поля відкривається на «старшій» сторінці."""
+
+    def __init__(self, owner: "DateField") -> None:
+        super().__init__()
+        self._owner = owner
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        super().showEvent(event)
+        if not self._owner.has_value():
+            year = QDate.currentDate().year() - metrics.DATE_BIRTH_PAGE_YEARS
+            self.setCurrentPage(year, QDate.currentDate().month())
 
 
 class DateField(QDateEdit):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, allow_empty: bool = False, parent=None) -> None:
         super().__init__(QDate.currentDate(), parent)
         self.setObjectName("DateField")
         self.setDisplayFormat(_DISPLAY_FORMAT)
         self.setCalendarPopup(True)
+        self.setMinimumWidth(metrics.DATE_FIELD_MIN_WIDTH)  # дата не обрізається
+        self._allow_empty = allow_empty
+        if allow_empty:
+            self.setMinimumDate(_EMPTY_DATE)
+            self.setSpecialValueText(strings.DATE_PLACEHOLDER)
+            self.setDate(_EMPTY_DATE)
 
         self._weekend_color = QColor()
-        calendar = QCalendarWidget()
+        calendar = _DateCalendar(self)
         calendar.setObjectName("DateCalendar")
         calendar.setLocale(QLocale(QLocale.Language.Ukrainian, QLocale.Country.Ukraine))
         calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
@@ -35,6 +64,17 @@ class DateField(QDateEdit):
         calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
         self.setCalendarWidget(calendar)
+
+    def has_value(self) -> bool:
+        return not (self._allow_empty and self.date() == _EMPTY_DATE)
+
+    def clear_value(self) -> None:
+        """Порожній стан (для allow_empty) або «сьогодні»."""
+        self.setDate(_EMPTY_DATE if self._allow_empty else QDate.currentDate())
+
+    def iso(self) -> str | None:
+        """'РРРР-ММ-ДД' або None, якщо дату не обрано."""
+        return self.date().toString(_ISO_FORMAT) if self.has_value() else None
 
     # Колір вихідних: значення приходить із QSS (qproperty-weekendColor)
     def _get_weekend_color(self) -> QColor:

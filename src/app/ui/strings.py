@@ -51,24 +51,28 @@ STAGE_STATE_ERROR = "Помилка"
 DROPZONE_TITLE = "Перетягніть двоканальний файл"
 DROPZONE_HINT = ".wav · канал 0 — лікар, канал 1 — пацієнт"
 DROPZONE_BUTTON = "Додати файл"
-DROPZONE_CLEAR = "Скасувати"
+DROPZONE_CLEAR = "Видалити"
+DROPZONE_ADDED = "Файл додано"
 DROPZONE_DIALOG_TITLE = "Оберіть аудіофайл"
 DROPZONE_FILTER = "Аудіо"
 DROPZONE_BAD_TYPE = "Підтримуються лише файли: {types}"
-DROPZONE_FILE_FMT = "{name} ({size_mb:.1f} MB)"
 
 #Для add_session
 ADD_TITLE = "Додати запис сесії"
 ADD_CRUMB = "Нова сесія"
 ADD_LANGUAGE = "Мова запису"
 ADD_LANG_UK = "Українська"
-ADD_NUMBER = "Номер сесії"
+ADD_NUMBER_FMT = "Сесія №{number}"
 ADD_DATE = "Дата сесії"
 ADD_START = "Запустити обробку"
-ADD_AGAIN = "Додати запис знову"
+ADD_REPEAT = "Додати запис повторно"
+ADD_CONTINUE = "Продовжити обробку"
+ADD_LEAVE = "До профілю"
 ADD_TO_PROFILE = "До профілю пацієнта"
 ADD_DONE_TOAST = "Обробку завершено"
-ADD_RESUMED_HINT = "Обробка цієї сесії не розпочалась. Додайте запис знову: обробка почнеться з нуля з тим самим номером."
+ADD_START_HINT = "Додайте аудіофайл, щоб запустити обробку"
+ADD_FAILED_HINT = "Обробка зупинилась на помилці. Додайте запис повторно: він замінить попередній, номер сесії збережеться."
+ADD_UNFINISHED_HINT = "Обробку цієї сесії не завершено. Її можна продовжити: запис уже збережено."
 
 # --- Кобильник: Екран сесії ---
 SESSION_LOADING = "Завантаження сесії…"
@@ -254,14 +258,13 @@ DYNAMICS_SLOPE_UNITS = {
 
 # --- Вероніка: Новий пацієнт, Налаштування, Архів ---
 NEW_PATIENT_TITLE = "Новий пацієнт"
-NEW_PATIENT_SUBTITLE = "Усі поля необов'язкові — картку можна заповнити пізніше"
+NEW_PATIENT_SUBTITLE = "Усі поля основних контактів обов'язкові. Екстрений контакт можна не заповнювати."
 NEW_PATIENT_CARD_MAIN = "Основні контакти"
 NEW_PATIENT_CARD_EMERGENCY = "Екстрений контакт"
 
 NEW_PATIENT_NAME_LABEL = "Прізвище та ім'я"
 NEW_PATIENT_NAME_PLACEHOLDER = "Наприклад: Мельник Олена"
 NEW_PATIENT_BIRTH_LABEL = "Дата народження"
-NEW_PATIENT_BIRTH_PLACEHOLDER = "дд.мм.рррр"
 NEW_PATIENT_PHONE_LABEL = "Телефон"
 NEW_PATIENT_PHONE_PLACEHOLDER = "+380 XX XXX XX XX"
 NEW_PATIENT_EMAIL_LABEL = "Email"
@@ -274,14 +277,10 @@ NEW_PATIENT_EMERG_REL_LABEL = "Стосунок"
 NEW_PATIENT_EMERG_PHONE_LABEL = "Телефон екстреного контакту"
 NEW_PATIENT_EMERG_CONSENT = "Пацієнт надав згоду на звернення до екстреного контакту"
 
-NEW_PATIENT_HINT_PHONE = "Формат: +380..."
-NEW_PATIENT_HINT_EMAIL = "Перевірте формат email"
-NEW_PATIENT_HINT_DATE = "Формат дати: дд.мм.рррр"
+NEW_PATIENT_CHANNELS = ("Telegram", "Телефон", "Email")
+NEW_PATIENT_RELATIONS = ("Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга")
 
-NEW_PATIENT_CHANNELS = ("—", "Telegram", "Телефон", "Email")
-NEW_PATIENT_RELATIONS = ("—", "Партнер", "Родич", "Батько / мати", "Брат / сестра", "Друг / подруга", "Інше")
-
-BTN_NEXT = "Далі — додати запис сесії"
+BTN_NEXT = "Далі"
 
 ARCHIVE_TITLE = "Архів пацієнтів"
 ARCHIVE_SEARCH_PLACEHOLDER = "Пошук за ім'ям..."
@@ -349,7 +348,7 @@ PROFILE_DELETE_TEXT = (
     "Цю дію неможливо скасувати.")
 PROFILE_DELETE_CONFIRM = "Видалити"
 PROFILE_DELETED_TOAST = "Пацієнта видалено"
-PROFILE_SESSIONS_EMPTY = "Сесій ще немає"
+PROFILE_SESSIONS_EMPTY = "Сесій ще немає. Щоб вони з'явились, додайте першу сесію."
 
 # PDF export
 PDF_SAVE_TITLE = "Зберегти PDF"
@@ -385,3 +384,46 @@ PDF_CARD_NAME = "Медкартка_{name}.pdf"
 PDF_TREND_NAME = "Динаміка_{name}.pdf"
 PDF_TREND_SUMMARY = "Підсумок динаміки"
 PDF_SESSION_METRICS = "Показники за сесіями"
+
+# --- Спільне: валідація форм, вибір зі списком, меню дій рядка ---
+VALIDATION_REQUIRED = "Обов'язкове поле"
+VALIDATION_MIN_LEN = "Не менше {min} символів"
+VALIDATION_MAX_LEN = "Не більше {max} символів"
+VALIDATION_PHONE = "Формат: +380 XX XXX XX XX"
+VALIDATION_EMAIL = "Перевірте формат email, наприклад name@example.com"
+VALIDATION_CHOOSE = "Оберіть варіант зі списку"
+REQUIRED_MARK = " *"
+DATE_PLACEHOLDER = "дд.мм.рррр"
+CHOICE_PLACEHOLDER = "Оберіть зі списку"
+CHOICE_OTHER = "Інше"
+
+ROW_MENU_TOOLTIP = "Дії"
+ROW_MENU_DELETE = "Видалити"
+PATIENT_ROW_DELETE_TITLE = "Видалити пацієнта"
+
+FILEINFO_SEPARATOR = " · "
+FILEINFO_SIZE_MB = "{value:.1f} МБ"
+FILEINFO_SIZE_KB = "{value:.0f} КБ"
+
+# --- Новий пацієнт, профіль, медкартка (валідація) ---
+VALIDATION_DATE = "Оберіть дату в календарі"
+VALIDATION_CONSENT = "Потрібна згода пацієнта"
+VALIDATION_BIRTH_FORMAT = "Формат дати: дд.мм.рррр, не пізніше сьогодні"
+NEW_PATIENT_CHANNEL_OTHER_PLACEHOLDER = "Вкажіть свій канал зв'язку"
+NEW_PATIENT_RELATION_OTHER_PLACEHOLDER = "Вкажіть, ким приходиться"
+NEW_PATIENT_NEXT_HINT = "Щоб продовжити, заповніть: {what}"
+NEW_PATIENT_MISSING = {
+    "name": "прізвище та ім'я",
+    "birth": "дату народження",
+    "phone": "телефон",
+    "email": "email",
+    "channel": "зручний канал зв'язку",
+    "emerg_name": "ім'я екстреного контакту",
+    "emerg_relation": "стосунок екстреного контакту",
+    "emerg_phone": "телефон екстреного контакту",
+    "emerg_consent": "згоду на звернення до екстреного контакту",
+}
+SESSION_ROW_DELETE_TITLE = "Видалити сесію"
+SESSION_ROW_DELETE_TEXT = "Видалити сесію №{number} від {date}? Цю дію неможливо скасувати."
+PROFILE_ADD_FIRST_SESSION_BUTTON = "Додати першу сесію"
+MEDCARD_PANEL_CANCEL = "Скасувати зміни"

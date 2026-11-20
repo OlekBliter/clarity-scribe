@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.app.ui import metrics, strings
 from src.app.ui.errors import show_error
@@ -20,8 +20,10 @@ from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.action_icon import ActionIcon
 from src.app.ui.widgets.badge import badge_for
 from src.app.ui.widgets.breadcrumb import Breadcrumb
-from src.app.ui.widgets.buttons import danger_button, outline_button, primary_button
+from src.app.ui.widgets.buttons import outline_button, primary_button
 from src.app.ui.widgets.card import ListItemCard
+from src.app.ui.widgets.confirm import confirm_destructive
+from src.app.ui.widgets.row_menu import RowMenuButton
 from src.app.ui.widgets.skeleton import Skeleton
 
 
@@ -63,14 +65,15 @@ class PatientProfileScreen(BaseScreen):
         self._add = primary_button(strings.PROFILE_ADD_SESSION_BUTTON)
         self._card = outline_button(strings.PROFILE_CARD)
         self._dynamics = outline_button(strings.PROFILE_DYNAMICS)
-        self._delete = danger_button(strings.PROFILE_DELETE)
+        # Видалення пацієнта: «⋯» крайня справа з єдиним пунктом «Видалити»
+        self._delete = RowMenuButton([(strings.ROW_MENU_DELETE, self._confirm_delete)])
         self._add.clicked.connect(lambda *_: self.router.go(Route.ADD_SESSION, patient_id=self._patient_id))
         self._card.clicked.connect(self._open_card)
         self._dynamics.clicked.connect(self._open_dynamics)
-        self._delete.clicked.connect(self._confirm_delete)
-        for btn in (self._add, self._card, self._dynamics, self._delete):
+        for btn in (self._add, self._card, self._dynamics):
             actions.addWidget(btn)
         actions.addStretch(1)
+        actions.addWidget(self._delete)
         root.addLayout(actions)
 
         heading = QLabel(strings.PROFILE_SESSIONS)
@@ -145,10 +148,13 @@ class PatientProfileScreen(BaseScreen):
 
         clear_layout(self._sessions)
         if not profile["sessions"]:
+            # Одна кнопка на екрані: верхня, підписана «Додати першу сесію»
+            self._add.setText(strings.PROFILE_ADD_FIRST_SESSION_BUTTON)
             empty = QLabel(strings.PROFILE_SESSIONS_EMPTY)
             empty.setObjectName("Muted")
             self._sessions.addWidget(empty)
             return
+        self._add.setText(strings.PROFILE_ADD_SESSION_BUTTON)
         for session in profile["sessions"]:
             text, variant = badge_for(session["badge"])
             row = ListItemCard(
@@ -156,9 +162,24 @@ class PatientProfileScreen(BaseScreen):
                 session["subtitle"],
                 text,
                 variant,
+                actions=[(strings.ROW_MENU_DELETE, lambda s=session: self._confirm_delete_session(s))],
             )
             row.clicked.connect(lambda *_, s=session: self._open_session(s))
             self._sessions.addWidget(row)
+
+    def _confirm_delete_session(self, session: dict) -> None:
+        """Видалення сесії з меню «⋯» рядка: підтвердження, фасад, перезавантаження профілю."""
+        if not confirm_destructive(
+            self, strings.SESSION_ROW_DELETE_TITLE,
+            strings.SESSION_ROW_DELETE_TEXT.format(number=session["number"], date=session["date"]),
+        ):
+            return
+        self.call(
+            self.facade.delete_session,
+            session["session_id"],
+            on_success=lambda _r=None: self.on_open(patient_id=self._patient_id),
+            on_error=lambda err: show_error(self, err),
+        )
 
     def _open_dynamics(self) -> None:
         """Відкриває динаміку; страховка на випадок, якщо кнопку активовано без даних."""
@@ -185,19 +206,11 @@ class PatientProfileScreen(BaseScreen):
         """Просить підтвердження й видаляє пацієнта через фасад."""
         if self._patient_id is None:
             return
-        box = QMessageBox(self)
-        box.setWindowTitle(strings.PROFILE_DELETE_TITLE)
-        box.setText(strings.PROFILE_DELETE_TEXT.format(name=self._patient_name))
-        box.setIcon(QMessageBox.Icon.Warning)
-
-        confirm_btn = box.addButton(strings.PROFILE_DELETE_CONFIRM, QMessageBox.ButtonRole.DestructiveRole)
-        confirm_btn.setObjectName("DangerButton")
-        cancel_btn = box.addButton(strings.CANCEL, QMessageBox.ButtonRole.RejectRole)
-        cancel_btn.setObjectName("SecondaryButton")
-        box.setDefaultButton(cancel_btn)
-
-        box.exec()
-        if box.clickedButton() is not confirm_btn:
+        if not confirm_destructive(
+            self, strings.PROFILE_DELETE_TITLE,
+            strings.PROFILE_DELETE_TEXT.format(name=self._patient_name),
+            strings.PROFILE_DELETE_CONFIRM,
+        ):
             return
 
         self._delete.setEnabled(False)

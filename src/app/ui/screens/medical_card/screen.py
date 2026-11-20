@@ -7,7 +7,7 @@ from functools import partial
 from copy import deepcopy
 from PySide6.QtCore import Qt, QRect, QDate
 from PySide6.QtWidgets import (
-    QMessageBox, QHBoxLayout, QLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QHBoxLayout, QLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 from src.app.ui import metrics, strings as S
 from src.app.ui.export_pdf import export_card, save_screen_pdf
@@ -20,6 +20,7 @@ from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import Badge, badge_for
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import outline_button, primary_button
+from src.app.ui.widgets.confirm import ask_confirm
 from src.app.ui.widgets.skeleton import Skeleton
 from .components import CardBlock, CardColumns, ContactsBlock, text_label
 from .panel import CardPanel
@@ -289,15 +290,8 @@ class MedicalCardScreen(BaseScreen):
         if contacts or evidence:
             action = partial(action, contacts=contacts, evidence=evidence)
         if approve:
-            box = QMessageBox(self)
-            box.setWindowTitle(S.MEDCARD_APPROVE)
-            box.setText(S.MEDCARD_CONFIRM_APPROVE)
-            yes = box.addButton(S.MEDCARD_APPROVE, QMessageBox.ButtonRole.AcceptRole)
-            cancel = box.addButton(S.CANCEL, QMessageBox.ButtonRole.RejectRole)
-            box.setDefaultButton(cancel)
-            box.setEscapeButton(cancel)
-            box.exec()
-            if box.clickedButton() is not yes:
+            if not ask_confirm(self, S.MEDCARD_APPROVE, S.MEDCARD_CONFIRM_APPROVE,
+                               S.MEDCARD_APPROVE, destructive=False):
                 return
         position = self._scroll.verticalScrollBar().value()
         generation = self._request_id

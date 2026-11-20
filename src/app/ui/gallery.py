@@ -9,16 +9,19 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
                                QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton,
                                QScrollArea, QTextEdit, QVBoxLayout, QWidget)
 
-from src.app.ui import metrics
+from src.app.ui import metrics, strings, validation
 from src.app.ui.theme.loader import load_theme
 from src.app.ui.widgets.badge import VARIANTS, Badge
 from src.app.ui.widgets.buttons import (danger_button, outline_button, primary_button,
                                         secondary_button)
 from src.app.ui.widgets.card import Card, ListItemCard
+from src.app.ui.widgets.confirm import confirm_destructive
+from src.app.ui.widgets.date_field import DateField
+from src.app.ui.widgets.form_field import ChoiceWithOther, FormField
 from src.app.ui.widgets.toast import Toast
 
 
@@ -91,7 +94,7 @@ class Gallery(QWidget):
         name.setPlaceholderText("Введіть ім'я")
         combo = QComboBox()
         combo.addItems(["Telegram", "Телефон", "Email"])
-        date = QDateEdit()
+        date = DateField()
         date.setDisplayFormat("dd.MM.yyyy")
         col.addLayout(_row(name, combo, date, QCheckBox("Надаю згоду")))
         note = QTextEdit()
@@ -99,9 +102,21 @@ class Gallery(QWidget):
         note.setFixedHeight(70)
         col.addWidget(note)
 
+        col.addWidget(_section("Форма з валідацією"))
+        phone = QLineEdit()
+        phone.setPlaceholderText("+380 XX XXX XX XX")
+        col.addWidget(FormField("Телефон", phone, lambda: validation.validate_phone(phone.text()),
+                                required=True))
+        col.addWidget(FormField("Зручний канал", ChoiceWithOther(
+            ("Telegram", "Телефон", "Email"), "Вкажіть свій канал"), lambda: None, required=True))
+        col.addWidget(FormField("Дата народження", DateField(allow_empty=True), lambda: None))
+
         col.addWidget(_section("Картки"))
         col.addWidget(ListItemCard("Мельник Олена", "5 сесій • остання 02.10.2026",
                                    "Чекає на перегляд", "warning"))
+        col.addWidget(ListItemCard("Рядок з меню «⋯»", "натисніть «⋯» праворуч", "Чернетка",
+                                   "warning", actions=[(strings.ROW_MENU_DELETE, lambda: confirm_destructive(
+                                       self, strings.PATIENT_ROW_DELETE_TITLE, "Видалити?"))]))
         col.addWidget(ListItemCard("Коваленко Дмитро", "3 сесії • остання 28.09.2026",
                                    "Підтверджено", "success"))
         for name_, label in (("CardDanger", "Потребує уваги"), ("CardWarning", "Суперечливо"),

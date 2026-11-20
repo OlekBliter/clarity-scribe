@@ -17,20 +17,14 @@ from src.app.ui.theme.loader import load_theme
 
 
 def make_facade(use_stub: bool):
-    """Створює фасад. Використовує create_facade, а якщо його ще немає
-    (factory.py пишуть у команді фасаду), для --stub бере заглушку напряму.
-
-    TODO: видалити запасний варіант, коли factory.py з'явиться в develop.
-    """
-    try:
-        from src.services.facade import create_facade
-    except ImportError:
-        if not use_stub:
-            raise SystemExit("create_facade ще не готовий: запускайте з --stub")
+    """Створює фасад: заглушку (--stub, із затримкою кроків) або реальний."""
+    if use_stub:
+        # Заглушка зі затримкою кроків: create_facade(True) створює її з step_delay=0.0,
+        # тоді всі етапи «виконуються» миттєво і анімації прогресу не видно.
         from src.services.facade import ClarityScribeFacadeStub
-        # step_delay: щоб на екрані обробки було видно прогрес
         return ClarityScribeFacadeStub(step_delay=0.6)
-    return create_facade(use_stub)
+    from src.services.facade import create_facade
+    return create_facade(False)
 
 
 def main(argv: list[str] | None = None) -> int:
