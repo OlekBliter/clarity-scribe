@@ -36,6 +36,7 @@ from .facade import (
     ProgressCallback,
     FacadeError,
 )
+from src.systems.clinical_engine.exceptions import LLMRequestError
 from src.database.exceptions import RepositoryError
 from src.services.orchestrator.errors import DoctorInputError, StepFailedError
 from src.systems.longitudinal.exceptions import LongitudinalError
@@ -92,8 +93,9 @@ def _guard(method: F) -> F:
     * ``FacadeError`` is re-raised unchanged;
     * ``DoctorInputError`` (including ``InvalidTransitionError``) becomes
       ``FacadeError`` with the doctor-facing message;
-    * ``StepFailedError``, ``RepositoryError``, ``OSError`` and
+    * ``StepFailedError``, ``RepositoryError``, ``OSError``,
       ``LongitudinalError`` (S5 dynamics, which the Orchestrator does not wrap)
+      and ``LLMRequestError`` (unexpected answer to the LLM connection check)
       are logged with a traceback and become ``FacadeError`` with a generic
       message;
     * any other exception is a bug and propagates unchanged.
@@ -114,7 +116,7 @@ def _guard(method: F) -> F:
             raise
         except DoctorInputError as exc:
             raise FacadeError(str(exc)) from exc
-        except (StepFailedError, RepositoryError, OSError, LongitudinalError) as exc:
+        except (StepFailedError, RepositoryError, OSError, LongitudinalError, LLMRequestError) as exc:
             logger.exception(f"Facade call {method.__name__} failed")
             raise FacadeError(_GENERIC_ERROR) from exc
 
@@ -419,3 +421,15 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
             "trends": trends,
             "summary_text": dynamics_summary(trends),
         }
+
+    # ----------------------------------------------------------------- llm`s connection
+
+    @_guard
+    def test_llm_connection(self, provider: str, api_key: str) -> dict[str, Any]:
+        """Check that the LLM provider accepts the key. Sends no patient data.
+
+        Returns:
+            ``{"ok": bool, "message": str, "latency_ms": int | None}``
+        """
+        from .connection_check import check_connection
+        return check_connection(provider, api_key)
