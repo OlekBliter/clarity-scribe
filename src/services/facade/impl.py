@@ -222,8 +222,21 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     
     @_guard
     def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
-        """Register a new recording via the Orchestrator and return its id."""
-        return self._o.register_session(patient_id, wav_path, language, session_date)
+        """Register a new recording via the Orchestrator and return its id.
+
+        The channel roles come from the ``channels_swapped`` setting at the
+        moment of the call. The setting applies only to new sessions and to
+        restarts of an unfinished session; existing sessions keep their map.
+        """
+        return self._o.register_session(
+            patient_id, wav_path, language, session_date, self._channel_map()
+        )
+
+    def _channel_map(self) -> dict[str, int]:
+        """Roles to WAV channels according to the ``channels_swapped`` setting."""
+        if self.get_settings()["channels_swapped"]:
+            return {"DOCTOR": 1, "PATIENT": 0}
+        return {"DOCTOR": 0, "PATIENT": 1}
 
     @_guard
     def process_session(self, session_id: str, on_progress: ProgressCallback | None = None) -> None:
@@ -433,3 +446,26 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         """
         from .connection_check import check_connection
         return check_connection(provider, api_key)
+
+    # ----------------------------------------------------------------- settings
+
+    def get_settings(self) -> dict[str, Any]:
+        """Read the saved settings; see ``facade.py`` for the response shape.
+
+        ``db_path`` and ``audio_dir`` come from the Orchestrator's data
+        directory. ``has_api_key`` only reports whether ``GEMINI_API_KEY``
+        is set; the key itself is never read into the response.
+        """
+        
+        
+
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Validate and save the settings; see ``facade.py`` for the rules.
+
+        All values are checked before anything is written, so invalid input
+        changes nothing. A non-empty ``api_key`` replaces the saved key;
+        the key is never logged.
+        """

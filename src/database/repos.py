@@ -442,6 +442,21 @@ class SessionsRepo:
         if cursor.rowcount == 0:
             raise RecordNotFoundError(f"Session '{session_id}' was not found.")
 
+    def update_channel_map(
+        self, conn: sqlite3.Connection, session_id: str, channel_map: dict[str, int]
+    ) -> None:
+        """Update the channel roles selected for a session retry."""
+        _validate_session_inputs(channel_map)
+        try:
+            cursor = conn.execute(
+                "UPDATE sessions SET channel_map = ? WHERE session_id = ?",
+                (_dump_json("sessions", "channel_map", channel_map), session_id),
+            )
+        except sqlite3.Error as database_error:
+            raise RepositoryError("Failed to update session channel map.") from database_error
+        if cursor.rowcount == 0:
+            raise RecordNotFoundError(f"Session '{session_id}' was not found.")
+
     def delete(self, conn: sqlite3.Connection, session_id: str) -> None:
         self.get(conn, session_id)
         SoapNotesRepo().delete(conn, session_id)

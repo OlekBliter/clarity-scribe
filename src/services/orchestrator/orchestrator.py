@@ -96,6 +96,8 @@ STEP_ERRORS: tuple[type[Exception], ...] = SYSTEM_ERRORS + (
 )
 
 REQUIRED_SYSTEM_KEYS: frozenset[str] = frozenset({"s1", "s2", "s3", "s4", "s5", "s6"})
+# WAV channel of each speaker when the doctor has not swapped them.
+DEFAULT_CHANNEL_MAP: dict[str, int] = {"DOCTOR": 0, "PATIENT": 1}
 CARD_CONTACT_FIELDS = frozenset({
     "preferred_name",
     "birth_date",
@@ -580,15 +582,21 @@ class Orchestrator:
         source_wav: str | Path,
         language_hint: str,
         session_date: str,
+        channel_map: dict[str, int] | None = None,
     ) -> str:
         """Create a new session or restart the latest unfinished session.
 
         The slow WAV copy happens before the transaction, so the write lock is
         held only for renames and short SQL. If the transaction fails, the
         previous WAV is restored (on restart) or the new audio directory is
-        removed (on creation). On restart the date and language are replaced
-        with the newly entered values.
+        removed (on creation). On restart the date, language and channel map
+        are replaced with the newly entered values.
+
+        ``channel_map`` maps roles to WAV channels; ``None`` means
+        ``{"DOCTOR": 0, "PATIENT": 1}``.
         """
+        if channel_map is None:
+            channel_map = dict(DEFAULT_CHANNEL_MAP)
         if language_hint != "uk":
             raise DoctorInputError("Підтримується лише українська мова.")
         try:
@@ -629,6 +637,7 @@ class Orchestrator:
                     installed = True
                     self.sessions_repo.update_language(conn, session_id, language_hint)
                     self.sessions_repo.update_date(conn, session_id, session_date)
+                    self.sessions_repo.update_channel_map(conn, session_id, channel_map)
                     self.sessions_repo.reset_pipeline(conn, session_id)
                 else:
                     number = self.sessions_repo.max_number(conn, patient_id)
@@ -639,7 +648,7 @@ class Orchestrator:
                         number,
                         session_date,
                         "",  # replaced by update_audio_path before commit
-                        {"DOCTOR": 0, "PATIENT": 1},
+                        channel_map,
                         language_hint,
                     )
                     is_new = True
