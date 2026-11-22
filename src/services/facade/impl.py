@@ -41,6 +41,7 @@ from src.database.exceptions import RepositoryError
 from src.services.orchestrator.errors import DoctorInputError, StepFailedError
 from src.systems.longitudinal.exceptions import LongitudinalError
 from src.services.orchestrator.state import patient_badge, session_badge
+from . import settings_store
 from .views import build_soap_view, build_card_view
 from .registry import (
     mmss, 
@@ -57,6 +58,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
+
+# Session languages the pipeline supports (S1 is Ukrainian-only).
+_LANGUAGES = ("uk",)
 
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
@@ -449,16 +453,29 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
 
     # ----------------------------------------------------------------- settings
 
+    @_guard
     def get_settings(self) -> dict[str, Any]:
         """Read the saved settings; see ``facade.py`` for the response shape.
 
-        ``db_path`` and ``audio_dir`` come from the Orchestrator's data
-        directory. ``has_api_key`` only reports whether ``GEMINI_API_KEY``
-        is set; the key itself is never read into the response.
+        Values come from ``settings.json`` in the Orchestrator's data
+        directory (defaults if it is missing or broken). ``has_api_key`` only
+        reports whether a key is saved; the key itself is never returned.
         """
-        
-        
+        data_dir = Path(self._o.data_dir)
+        saved = settings_store.load(data_dir)
+        provider = saved["llm_provider"]
+        return {
+            "channels_swapped": saved["channels_swapped"] is True,
+            "language": saved["language"],
+            "llm_provider": provider,
+            "has_api_key": settings_store.has_api_key(data_dir, provider),
+            "db_path": str(self._db.db_path),
+            "audio_dir": str(data_dir / "audio"),
+            "providers": sorted(settings_store.PROVIDER_ENV_KEYS),
+            "languages": list(_LANGUAGES),
+        }
 
+    @_guard
     def save_settings(self, channels_swapped: bool,
                       language: str,
                       llm_provider: str,
@@ -466,6 +483,19 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         """Validate and save the settings; see ``facade.py`` for the rules.
 
         All values are checked before anything is written, so invalid input
-        changes nothing. A non-empty ``api_key`` replaces the saved key;
-        the key is never logged.
+        changes nothing. A non-empty ``api_key`` replaces the saved key in
+        the data directory's ``.env``; the key is never logged.
         """
+        if llm_provider not in settings_store.PROVIDER_ENV_KEYS:
+            raise FacadeError("Непідтримуваний провайдер")
+        if language not in _LANGUAGES:
+            raise FacadeError("Непідтримувана мова")
+        data_dir = Path(self._o.data_dir)
+        settings_store.save(data_dir, {
+            "channels_swapped": bool(channels_swapped),
+            "language": language,
+            "llm_provider": llm_provider,
+        })
+        key = (api_key or "").strip()
+        if key:
+            settings_store.save_api_key(data_dir, llm_provider, key)
