@@ -25,15 +25,17 @@ class Gemini(LLM):
         self.response_schema = response_schema
         self.api_key = api_key
         self.client = None
+        self._client_api_key = None
 
     def _get_client(self) -> genai.Client:
-        if self.client is None:
-            api_key = self.api_key or os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise ConfigurationError(
-                    "GEMINI_API_KEY is not configured. Set it before making an LLM request."
-                )
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ConfigurationError(
+                "GEMINI_API_KEY is not configured. Set it before making an LLM request."
+            )
+        if self.client is None or api_key != self._client_api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     @retry(
