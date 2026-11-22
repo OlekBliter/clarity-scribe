@@ -56,6 +56,10 @@ def create_facade(use_stub: bool = True) -> ClarityScribeFacade:
     from .impl import ClarityScribeFacadeImpl
 
     directory = _db_dir()
+
+    from dotenv import load_dotenv
+    load_dotenv(directory / ".env", override=False)
+    
     db = Database(directory / _DB_FILE)
     db.init_schema()
     orchestrator = Orchestrator(db, build_default_systems(), directory)
