@@ -120,6 +120,10 @@ _SOAP_SEED = {
     ),
 }
 _LLM_PROVIDERS = frozenset({"gemini"})
+_LANGUAGES = ("uk",)
+# Fake paths shown on the Settings screen (the stub has no data directory).
+_STUB_DB_PATH = "C:/Users/demo/AppData/Roaming/clarityscribe/clarityscribe.db"
+_STUB_AUDIO_DIR = "C:/Users/demo/AppData/Roaming/clarityscribe/audio"
 _SOAP_PATH_RE = re.compile(r"^(?:(subjective|objective|assessment)\.text|plan\[(\d+)\]\.text)$")
 
 
@@ -194,6 +198,12 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         self._cards: dict[str, dict[str, Any]] = {}
         self._active: set[str] = set()
         self._progress: dict[str, dict[str, Any]] = {}
+        self._settings: dict[str, Any] = {
+            "channels_swapped": False,
+            "language": "uk",
+            "llm_provider": "gemini",
+            "has_api_key": False,
+        }
         self._seed()
 
     # ------------------------------------------------------------------ seeding
@@ -769,7 +779,9 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         if (provider or "").strip().lower() not in _LLM_PROVIDERS:
             return {"ok": False, "message": "Невідомий провайдер LLM", "latency_ms": None}
         key = (api_key or "").strip()
-        if not key:
+        with self._lock:
+            has_saved_key = self._settings["has_api_key"]
+        if not key and not has_saved_key:
             return {"ok": False, "message": "Введіть API-ключ", "latency_ms": None}
         if key.startswith("bad"):
             return {"ok": False, "message": "Невірний API-ключ", "latency_ms": None}
@@ -777,3 +789,40 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         time.sleep(0.5)
         latency_ms = round((time.perf_counter() - started) * 1000)
         return {"ok": True, "message": "З'єднання встановлено", "latency_ms": latency_ms}
+
+    # ----------------------------------------------------------------- settings
+
+    def get_settings(self) -> dict[str, Any]:
+        """Return a copy of the in-memory settings plus fake paths.
+
+        The key itself is never stored by the stub, only ``has_api_key``.
+        """
+        with self._lock:
+            settings = dict(self._settings)
+        settings.update(
+            db_path=_STUB_DB_PATH,
+            audio_dir=_STUB_AUDIO_DIR,
+            providers=sorted(_LLM_PROVIDERS),
+            languages=list(_LANGUAGES),
+        )
+        return settings
+
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Update the in-memory settings; nothing is written to disk.
+
+        A non-empty ``api_key`` sets ``has_api_key``; ``None`` or an empty
+        string keeps the current value. Invalid values change nothing.
+        """
+        if llm_provider not in _LLM_PROVIDERS:
+            raise FacadeError("Непідтримуваний провайдер")
+        if language not in _LANGUAGES:
+            raise FacadeError("Непідтримувана мова")
+        with self._lock:
+            self._settings["channels_swapped"] = bool(channels_swapped)
+            self._settings["language"] = language
+            self._settings["llm_provider"] = llm_provider
+            if (api_key or "").strip():
+                self._settings["has_api_key"] = True

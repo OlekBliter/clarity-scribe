@@ -41,6 +41,7 @@ from src.database.exceptions import RepositoryError
 from src.services.orchestrator.errors import DoctorInputError, StepFailedError
 from src.systems.longitudinal.exceptions import LongitudinalError
 from src.services.orchestrator.state import patient_badge, session_badge
+from . import settings_store
 from .views import build_soap_view, build_card_view
 from .registry import (
     mmss, 
@@ -57,6 +58,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
+
+# Session languages the pipeline supports (S1 is Ukrainian-only).
+_LANGUAGES = ("uk",)
 
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
@@ -222,8 +226,21 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     
     @_guard
     def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
-        """Register a new recording via the Orchestrator and return its id."""
-        return self._o.register_session(patient_id, wav_path, language, session_date)
+        """Register a new recording via the Orchestrator and return its id.
+
+        The channel roles come from the ``channels_swapped`` setting at the
+        moment of the call. The setting applies only to new sessions and to
+        restarts of an unfinished session; existing sessions keep their map.
+        """
+        return self._o.register_session(
+            patient_id, wav_path, language, session_date, self._channel_map()
+        )
+
+    def _channel_map(self) -> dict[str, int]:
+        """Roles to WAV channels according to the ``channels_swapped`` setting."""
+        if self.get_settings()["channels_swapped"]:
+            return {"DOCTOR": 1, "PATIENT": 0}
+        return {"DOCTOR": 0, "PATIENT": 1}
 
     @_guard
     def process_session(self, session_id: str, on_progress: ProgressCallback | None = None) -> None:
@@ -433,3 +450,52 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         """
         from .connection_check import check_connection
         return check_connection(provider, api_key)
+
+    # ----------------------------------------------------------------- settings
+
+    @_guard
+    def get_settings(self) -> dict[str, Any]:
+        """Read the saved settings; see ``facade.py`` for the response shape.
+
+        Values come from ``settings.json`` in the Orchestrator's data
+        directory (defaults if it is missing or broken). ``has_api_key`` only
+        reports whether a key is saved; the key itself is never returned.
+        """
+        data_dir = Path(self._o.data_dir)
+        saved = settings_store.load(data_dir)
+        provider = saved["llm_provider"]
+        return {
+            "channels_swapped": saved["channels_swapped"] is True,
+            "language": saved["language"],
+            "llm_provider": provider,
+            "has_api_key": settings_store.has_api_key(data_dir, provider),
+            "db_path": str(self._db.db_path),
+            "audio_dir": str(data_dir / "audio"),
+            "providers": sorted(settings_store.PROVIDER_ENV_KEYS),
+            "languages": list(_LANGUAGES),
+        }
+
+    @_guard
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Validate and save the settings; see ``facade.py`` for the rules.
+
+        All values are checked before anything is written, so invalid input
+        changes nothing. A non-empty ``api_key`` replaces the saved key in
+        the data directory's ``.env``; the key is never logged.
+        """
+        if llm_provider not in settings_store.PROVIDER_ENV_KEYS:
+            raise FacadeError("Непідтримуваний провайдер")
+        if language not in _LANGUAGES:
+            raise FacadeError("Непідтримувана мова")
+        data_dir = Path(self._o.data_dir)
+        settings_store.save(data_dir, {
+            "channels_swapped": bool(channels_swapped),
+            "language": language,
+            "llm_provider": llm_provider,
+        })
+        key = (api_key or "").strip()
+        if key:
+            settings_store.save_api_key(data_dir, llm_provider, key)

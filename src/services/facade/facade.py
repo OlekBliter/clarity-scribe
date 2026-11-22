@@ -326,3 +326,53 @@ class ClarityScribeFacade(ABC):
         Raises:
             FacadeError: Unexpected failure ("Сталася помилка. Спробуйте ще раз").
         """
+
+    # ----------------------------------------------------------------- settings
+
+    @abstractmethod
+    def get_settings(self) -> dict[str, Any]:
+        """Return the current application settings for the Settings screen.
+
+        The API key itself is never returned, only whether one is saved.
+        ``db_path`` and ``audio_dir`` are read-only (shown, not edited).
+
+        Returns:
+            ``{"channels_swapped": bool,     # False: channel 0 = doctor, 1 = patient
+               "language": "uk",
+               "llm_provider": "gemini",
+               "has_api_key": bool,
+               "db_path": str,
+               "audio_dir": str,
+               "providers": ["gemini"],      # allowed llm_provider values
+               "languages": ["uk"]}``        # allowed language values
+
+            Example::
+
+                {"channels_swapped": False, "language": "uk",
+                 "llm_provider": "gemini", "has_api_key": True,
+                 "db_path": "C:/Users/.../clarityscribe/clarityscribe.db",
+                 "audio_dir": "C:/Users/.../clarityscribe/audio",
+                 "providers": ["gemini"], "languages": ["uk"]}
+        """
+
+    @abstractmethod
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Save the settings from the Settings screen.
+
+        Nothing is saved if any value is invalid. The key is never logged.
+
+        Args:
+            channels_swapped: ``True`` if channel 0 is the patient and
+                channel 1 the doctor.
+            language: Session language, one of ``get_settings()["languages"]``.
+            llm_provider: Provider id, one of ``get_settings()["providers"]``.
+            api_key: New API key. ``None`` or an empty string keeps the
+                saved key unchanged.
+
+        Raises:
+            FacadeError: "Непідтримуваний провайдер", "Непідтримувана мова",
+                or "Сталася помилка. Спробуйте ще раз" if saving fails.
+        """
