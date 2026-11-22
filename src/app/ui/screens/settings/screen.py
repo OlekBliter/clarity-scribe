@@ -1,7 +1,9 @@
 """Налаштування застосунку.
 
 Фасад (методи, які використовує цей екран):
-  (поки немає в контракті фасаду: див. розділ 'Запити до фасаду' в роудмапі)
+  get_settings()                                     поточні значення, шляхи, чи є ключ
+  save_settings(channels_swapped, language, llm_provider, api_key)
+  test_llm_connection(provider, api_key)             у фоні, ~10 с
 
 Параметри відкриття: див. on_open у README_UI.md (розділ "Маршрути").
 """
@@ -29,15 +31,14 @@ from src.app.ui.screens.base import BaseScreen
 from src.app.ui.widgets.badge import Badge
 from src.app.ui.widgets.buttons import outline_button, primary_button, secondary_button
 
-_DEFAULT_BASE_DIR = Path.home() / "ClarityScribe"
-_DEFAULT_DB_PATH = _DEFAULT_BASE_DIR / "clarity_scribe.db"
-_DEFAULT_AUDIO_DIR = _DEFAULT_BASE_DIR / "audio"
 
 
 class SettingsScreen(BaseScreen):
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
         self._channels_swapped = False
+        self._has_saved_key = False
+        self._provider_ids = ["gemini"]
 
         root = QVBoxLayout(self)
         root.setContentsMargins(*(metrics.CONTENT_MARGIN,) * 4)
@@ -84,7 +85,26 @@ class SettingsScreen(BaseScreen):
         root.addLayout(actions)
 
     def on_open(self, **params: Any) -> None:
-        """Екран статичний до підключення методів фасаду."""
+        self._api_key_input.clear()
+        self.call(self.facade.get_settings, on_success=self._apply_settings)
+
+    def _apply_settings(self, data: dict) -> None:
+        self._channels_swapped = bool(data["channels_swapped"])
+        self._update_channel_badges()
+        self._provider_ids = list(data.get("providers") or ["gemini"])
+        provider = str(data.get("llm_provider", "gemini")).lower()
+        if provider in self._provider_ids:
+            self._provider_combo.setCurrentIndex(self._provider_ids.index(provider))
+        self._has_saved_key = bool(data["has_api_key"])
+        self._api_key_input.setPlaceholderText(
+            strings.SETTINGS_API_KEY_SAVED_PLACEHOLDER if self._has_saved_key
+            else strings.SETTINGS_API_KEY_PLACEHOLDER)
+        self._db_path_input.setText(data["db_path"])
+        self._audio_path_input.setText(data["audio_dir"])
+
+    def _current_provider(self) -> str:
+        index = max(self._provider_combo.currentIndex(), 0)
+        return self._provider_ids[min(index, len(self._provider_ids) - 1)]
 
     def _build_audio_card(self) -> QFrame:
         card = QFrame()
@@ -183,7 +203,7 @@ class SettingsScreen(BaseScreen):
         db_row = QHBoxLayout()
         db_row.setSpacing(metrics.SPACING)
 
-        self._db_path_input = QLineEdit(str(_DEFAULT_DB_PATH))
+        self._db_path_input = QLineEdit()
         self._db_path_input.setReadOnly(True)
         db_row.addWidget(self._db_path_input, stretch=1)
 
@@ -196,7 +216,7 @@ class SettingsScreen(BaseScreen):
         audio_row = QHBoxLayout()
         audio_row.setSpacing(metrics.SPACING)
 
-        self._audio_path_input = QLineEdit(str(_DEFAULT_AUDIO_DIR))
+        self._audio_path_input = QLineEdit()
         self._audio_path_input.setReadOnly(True)
         audio_row.addWidget(self._audio_path_input, stretch=1)
 
@@ -235,17 +255,48 @@ class SettingsScreen(BaseScreen):
             self.window().toast.show_message(strings.SETTINGS_FOLDER_MISSING)
 
     def _on_test_connection(self) -> None:
-        self.window().toast.show_message(strings.TOAST_SOON)
+        self._test_conn_btn.setEnabled(False)
+        self._test_conn_btn.setText(strings.SETTINGS_CONN_CHECKING)
+        self.call(self.facade.test_llm_connection, self._current_provider(),
+                  self._api_key_input.text().strip(),
+                  on_success=self._on_connection_result, on_error=self._on_connection_error)
+
+    def _restore_test_button(self) -> None:
+        self._test_conn_btn.setEnabled(True)
+        self._test_conn_btn.setText(strings.SETTINGS_TEST_CONNECTION)
+
+    def _on_connection_result(self, result: dict) -> None:
+        self._restore_test_button()
+        text = result["message"]
+        if result["ok"] and result.get("latency_ms") is not None:
+            text = strings.SETTINGS_CONN_OK_FMT.format(message=text, ms=result["latency_ms"])
+        self.window().toast.show_message(text)
+
+    def _on_connection_error(self, exc: BaseException) -> None:
+        self._restore_test_button()
+        self._default_error(exc)
 
     def _on_reset(self) -> None:
+        """Повертає форму до стандартних значень; у фасаді змінюється після «Зберегти»."""
         self._channels_swapped = False
         self._update_channel_badges()
         self._language_combo.setCurrentIndex(0)
         self._provider_combo.setCurrentIndex(0)
         self._api_key_input.clear()
-        self._db_path_input.setText(str(_DEFAULT_DB_PATH))
-        self._audio_path_input.setText(str(_DEFAULT_AUDIO_DIR))
         self.window().toast.show_message(strings.SETTINGS_RESET_DONE)
 
     def _on_save(self) -> None:
-        self.window().toast.show_message(strings.SETTINGS_SAVED_DEV)
+        self._save_btn.setEnabled(False)
+        key = self._api_key_input.text().strip() or None  # порожній ключ = не змінювати
+        self.call(self.facade.save_settings, self._channels_swapped, "uk",
+                  self._current_provider(), key,
+                  on_success=self._on_saved, on_error=self._on_save_error)
+
+    def _on_saved(self, _result) -> None:
+        self._save_btn.setEnabled(True)
+        self.window().toast.show_message(strings.SETTINGS_SAVED)
+        self.on_open()  # перечитати: оновить «ключ збережено» і шляхи
+
+    def _on_save_error(self, exc: BaseException) -> None:
+        self._save_btn.setEnabled(True)
+        self._default_error(exc)

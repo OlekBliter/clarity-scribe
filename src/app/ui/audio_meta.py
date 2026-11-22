@@ -20,6 +20,15 @@ def wav_duration_seconds(path: str) -> float | None:
         return None
 
 
+def wav_channels(path: str) -> int | None:
+    """Кількість каналів .wav; None, якщо файл не читається як wav."""
+    try:
+        with wave.open(path, "rb") as audio:
+            return audio.getnchannels()
+    except (wave.Error, EOFError, OSError):
+        return None
+
+
 def format_duration(seconds: float) -> str:
     """65 -> '1:05', 3725 -> '1:02:05'."""
     total = int(round(seconds))
