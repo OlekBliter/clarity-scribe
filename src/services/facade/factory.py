@@ -21,10 +21,12 @@ def _db_dir() -> Path:
     ``%APPDATA%/clarityscribe`` (``~/.clarityscribe`` on other platforms).
     The directory is created if it does not exist.
     """
-    from dotenv import load_dotenv
+    from dotenv import dotenv_values
 
-    load_dotenv()  # real environment variables take precedence over .env
-    value = os.getenv("CLARITYSCRIBE_DATA_DIR", "").strip()
+    value = os.getenv("CLARITYSCRIBE_DATA_DIR")
+    if value is None:
+        value = dotenv_values(_ROOT / ".env").get("CLARITYSCRIBE_DATA_DIR") or ""
+    value = value.strip()
     if value:
         directory = _ROOT / Path(value).expanduser()
     elif os.getenv("APPDATA"):
@@ -50,12 +52,17 @@ def create_facade(use_stub: bool = True) -> ClarityScribeFacade:
 
         return ClarityScribeFacadeStub()
 
+    directory = _db_dir()
+    from dotenv import load_dotenv
+
+    load_dotenv(directory / ".env", override=False)
+    load_dotenv(_ROOT / ".env", override=False)
+
     from src.database.connection import Database
     from src.services.orchestrator import Orchestrator, build_default_systems
 
     from .impl import ClarityScribeFacadeImpl
 
-    directory = _db_dir()
     db = Database(directory / _DB_FILE)
     db.init_schema()
     orchestrator = Orchestrator(db, build_default_systems(), directory)
