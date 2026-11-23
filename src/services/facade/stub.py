@@ -196,6 +196,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         self._patients: dict[str, dict[str, Any]] = {}
         self._sessions: dict[str, dict[str, Any]] = {}
         self._cards: dict[str, dict[str, Any]] = {}
+        self._running_id: str | None = None
         self._active: set[str] = set()
         self._progress: dict[str, dict[str, Any]] = {}
         self._settings: dict[str, Any] = {
@@ -365,7 +366,10 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
     def delete_patient(self, patient_id: str) -> None:
         with self._lock:
             self._patient(patient_id)
-            for session_id in [s["session_id"] for s in self._patient_sessions(patient_id)]:
+            sessions = self._patient_sessions(patient_id)
+            if any(s["session_id"] == self._running_id for s in sessions):
+                raise FacadeError("Триває обробка запису пацієнта.")
+            for session_id in [s["session_id"] for s in sessions]:
                 self._sessions.pop(session_id, None)
                 self._active.discard(session_id)
                 self._progress.pop(session_id, None)
@@ -412,6 +416,12 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             return sessions[-1]["number"] + 1 if sessions else 1
 
     def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
+        return self._register(patient_id, wav_path, language, session_date, None)
+
+    def replace_session(self, patient_id, session_id, wav_path, language, session_date):
+        return self._register(patient_id, wav_path, language, session_date, session_id)
+
+    def _register(self, patient_id, wav_path, language, session_date, replace_id):
         if Path(wav_path).suffix.lower() != ".wav":
             raise FacadeError("Потрібен двоканальний .wav")
         if language != "uk":
@@ -423,7 +433,15 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         with self._lock:
             self._patient(patient_id)
             restart = self._restartable(patient_id)
+            if self._running_id:
+                raise FacadeError("Триває обробка іншого запису.")
+            if replace_id is not None and (not restart or replace_id != restart["session_id"]):
+                raise FacadeError("Цю сесію вже не можна замінити.")
+            if restart and replace_id is None:
+                raise FacadeError("Спершу продовжте або видаліть незавершену сесію.")
             if restart:  # the doctor repeats the same actions: restart the session from scratch
+                if restart["number"] == 1 and self._cards.get(patient_id, {}).get("status") == "approved":
+                    raise FacadeError("Медкартку підтверджено. Продовжте обробку зі збереженим записом.")
                 restart.update({"date": day, "status": "uploaded", "failed_step": None, "soap": None,
                                 "language": language})
                 self._progress.pop(restart["session_id"], None)
@@ -439,13 +457,20 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             session = self._session(session_id)
             if session["status"] != "uploaded":
                 raise FacadeError("Сесію вже оброблено")
+            if self._running_id:
+                raise FacadeError("Триває обробка іншого запису.")
+            self._running_id = session_id
             self._active.add(session_id)
-            self._progress[session_id] = {"done": set(), "running": None, "error": None}
+            progress = self._progress.setdefault(session_id, {"done": set(), "running": None, "error": None})
+            completed = progress.setdefault("completed_steps", set())
+            progress["error"] = None
         try:
             for step in PROCESSING_STEPS:
                 if step.startswith("s3") and session["number"] != 1:
                     continue
-                self._run_step(session_id, step, on_progress)
+                if step not in completed:
+                    self._run_step(session_id, step, on_progress)
+                    completed.add(step)
             with self._lock:
                 session["status"] = "drafted"
                 session["soap"] = self._new_soap(approved=False)
@@ -453,6 +478,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                     self._cards[session["patient_id"]] = self._new_card(session["patient_id"], approved=False)
         finally:
             with self._lock:
+                self._running_id = None
                 self._active.discard(session_id)
 
     def _run_step(self, session_id: str, step: str, on_progress: ProgressCallback | None) -> None:
@@ -614,6 +640,8 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
     def delete_session(self, session_id: str) -> None:
         with self._lock:
             session = self._session(session_id)
+            if self._running_id == session_id:
+                raise FacadeError("Триває обробка запису.")
             siblings = self._patient_sessions(session["patient_id"])
             if session["number"] == 1 and len(siblings) > 1:
                 raise FacadeError("Сесію №1 не можна видалити, поки є інші сесії")

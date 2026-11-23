@@ -13,7 +13,7 @@ _DB_FILE = "clarityscribe.db"
 _ROOT = Path(__file__).resolve().parents[3]
 
 
-def _db_dir() -> Path:
+def data_directory() -> Path:
     """Return the data directory for ``clarityscribe.db`` and ``audio/``.
 
     Uses ``CLARITYSCRIBE_DATA_DIR`` from the environment or ``.env``; a relative
@@ -52,7 +52,7 @@ def create_facade(use_stub: bool = True) -> ClarityScribeFacade:
 
         return ClarityScribeFacadeStub()
 
-    directory = _db_dir()
+    directory = data_directory()
     from dotenv import load_dotenv
 
     load_dotenv(directory / ".env", override=False)
@@ -66,4 +66,5 @@ def create_facade(use_stub: bool = True) -> ClarityScribeFacade:
     db = Database(directory / _DB_FILE)
     db.init_schema()
     orchestrator = Orchestrator(db, build_default_systems(), directory)
+    orchestrator.retry_audio_cleanup()
     return ClarityScribeFacadeImpl(orchestrator, db)

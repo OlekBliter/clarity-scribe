@@ -1,4 +1,3 @@
-from .acoustic_biomarker_service import AcousticBiomarkerService
 from .exceptions import (
     AcousticBiomarkerError,
     AudioFileNotFoundError,
@@ -13,3 +12,10 @@ __all__ = [
     "AudioProcessingError",
     "InvalidSegmentError",
 ]
+
+
+def __getattr__(name):
+    if name == "AcousticBiomarkerService":
+        from .acoustic_biomarker_service import AcousticBiomarkerService
+        return AcousticBiomarkerService
+    raise AttributeError(name)

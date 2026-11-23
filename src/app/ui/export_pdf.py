@@ -10,6 +10,7 @@ from PySide6.QtGui import (QAbstractTextDocumentLayout, QColor, QFont, QImage,
                           QPainter, QPalette, QPageSize, QPdfWriter, QTextDocument)
 from PySide6.QtWidgets import QApplication, QFileDialog
 from . import strings as S
+from .contact_display import birth_with_age
 from .medcard_layout import MEDCARD_LAYOUT
 
 
@@ -97,10 +98,10 @@ def save_screen_pdf(parent, data, filename, exporter):
         return
     try:
         exporter(data, path)
-    except OSError as exc:
-        message = S.PDF_WRITE_ERROR.format(error=exc)
-    except Exception as exc:
-        message = S.PDF_EXPORT_ERROR.format(error=exc)
+    except OSError:
+        message = S.PDF_WRITE_ERROR
+    except Exception:
+        message = S.PDF_EXPORT_ERROR
     else:
         message = S.SESSION_SAVED
     parent.window().toast.show_message(message)
@@ -131,8 +132,10 @@ def export_card(data: dict, path: str):
         for block, keys in blocks.items():
             content.append("<h3>" + S.MEDCARD_BLOCKS[block] + "</h3>")
             if block == "contacts":
-                for key, value in data.get("contacts", {}).items():
-                    content.append(f"<p><b>{_text(S.MEDCARD_CONTACTS.get(key, key))}</b><br>{_text(value)}</p>")
+                contacts = data.get("contacts", {})
+                for key, caption in S.MEDCARD_CONTACTS.items():
+                    value = birth_with_age(contacts) if key == "birth_date" else contacts.get(key)
+                    content.append(f"<p><b>{_text(caption)}</b><br>{_text(value)}</p>")
             else:
                 content.extend(_card_field(fields.pop(key)) for key in keys if key in fields)
         columns.append('<td width="50%" valign="top">' + "".join(content) + "</td>")

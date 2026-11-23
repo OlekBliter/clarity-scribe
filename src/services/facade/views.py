@@ -3,6 +3,7 @@ from datetime import date
 import math
 from typing import Any
 
+from src.schemas.contracts import SOAP_METRICS
 from .registry import mmss, age, fmt_date
 
 _DOCTOR_FIELDS = (
@@ -19,12 +20,10 @@ _DOCTOR_FIELDS = (
 
 
 def _biomarker_value(biomarkers: dict[str, Any], metric: str) -> Any:
-    if metric in biomarkers:
-        return biomarkers[metric]
-    for section in ("raw_dsp_features", "inferred_indices"):
-        values = biomarkers.get(section, {})
-        if metric in values:
-            return values[metric]
+    for section in (biomarkers, biomarkers.get("raw_dsp_features"), biomarkers.get("inferred_indices")):
+        if isinstance(section, dict) and metric in section:
+            value = section[metric]
+            return value if isinstance(value, (float, int)) and math.isfinite(value) else None
     return None
 
 
@@ -54,6 +53,8 @@ def build_soap_view(
 
     chips = []
     for metric in soap_data.get("objective", {}).get("biomarker_refs", []):
+        if metric not in SOAP_METRICS:
+            continue
         val = _biomarker_value(biomarkers, metric)
         baseline = (
             _biomarker_value(first_biomarkers, metric)

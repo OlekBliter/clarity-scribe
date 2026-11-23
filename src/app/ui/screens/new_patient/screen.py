@@ -34,6 +34,8 @@ class NewPatientScreen(BaseScreen):
 
     def __init__(self, facade, router, parent=None) -> None:
         super().__init__(facade, router, parent)
+        self._submitting = False
+        self._generation = 0
         self._fields: dict[str, FormField] = {}
         self._init_ui()
 
@@ -194,7 +196,7 @@ class NewPatientScreen(BaseScreen):
         for field in self._fields.values():
             field.refresh()
         missing = self._first_missing()
-        self.next_btn.setEnabled(missing is None)
+        self.next_btn.setEnabled(missing is None and not self._submitting)
         self._next_hint.setText(
             "" if missing is None
             else strings.NEW_PATIENT_NEXT_HINT.format(what=strings.NEW_PATIENT_MISSING[missing]))
@@ -218,11 +220,24 @@ class NewPatientScreen(BaseScreen):
         return contacts
 
     def _on_next(self) -> None:
-        if self._first_missing() is not None:  # страховка: кнопка мала бути вимкнена
+        if self._submitting or self._first_missing() is not None:  # страховка: кнопка мала бути вимкнена
             return
+        self._submitting = True
+        generation = self._generation
         self.next_btn.setEnabled(False)
         self.call(self.facade.create_patient, self._collect_contacts(),
-                  on_success=self._on_created, on_error=self._on_create_error)
+                  on_success=lambda pid: self._created_result(generation, pid),
+                  on_error=lambda exc: self._created_result(generation, None, exc))
+
+    def _created_result(self, generation, patient_id, error=None):
+        self._submitting = False
+        if generation != self._generation or self.router.current_route != Route.NEW_PATIENT:
+            self._refresh()
+            return
+        if error is not None:
+            self._on_create_error(error)
+        else:
+            self._on_created(patient_id)
 
     def _on_created(self, patient_id: str) -> None:
         # Звичайний потік: профіль нового пацієнта («Сесій ще немає») -> «Додати першу сесію».
@@ -235,6 +250,7 @@ class NewPatientScreen(BaseScreen):
         self._refresh()
 
     def on_open(self, **params: Any) -> None:
+        self._generation += 1
         self.name_input.clear()
         self.birth_input.clear_value()
         self.phone_input.clear()

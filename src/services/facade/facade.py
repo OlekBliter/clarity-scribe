@@ -66,6 +66,10 @@ class FacadeError(Exception):
         self.user_message = user_message
 
 
+class CleanupPendingError(FacadeError):
+    """The record is deleted, but audio removal is still pending."""
+
+
 class ClarityScribeFacade(ABC):
     """Abstract facade. See the docstring of each method for the response shape."""
 
@@ -119,7 +123,7 @@ class ClarityScribeFacade(ABC):
         """Return the number to show in the read-only "Номер сесії" field.
 
         It is the number of the last session if that session has not reached
-        ``drafted`` yet (it will be restarted), otherwise ``max + 1``; 1 for a new patient.
+        ``drafted`` yet (it must be completed or removed first), otherwise ``max + 1``; 1 for a new patient.
         """
 
     @abstractmethod
@@ -137,6 +141,11 @@ class ClarityScribeFacade(ABC):
         Raises:
             FacadeError: Not a two-channel ``.wav``, unreadable file, unknown patient.
         """
+
+    @abstractmethod
+    def replace_session(self, patient_id: str, session_id: str, wav_path: str, language: str,
+                        session_date: str) -> str:
+        """Replace the explicitly selected unfinished recording after confirmation."""
 
     @abstractmethod
     def process_session(

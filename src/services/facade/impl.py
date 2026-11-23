@@ -33,12 +33,13 @@ from src.schemas.contracts import DoctorCommand, Edit
 
 from .facade import (
     ClarityScribeFacade, 
+    CleanupPendingError,
     ProgressCallback,
     FacadeError,
 )
 from src.systems.clinical_engine.exceptions import LLMRequestError
 from src.database.exceptions import RepositoryError
-from src.services.orchestrator.errors import DoctorInputError, StepFailedError
+from src.services.orchestrator.errors import AudioCleanupPending, DoctorInputError, StepFailedError
 from src.systems.longitudinal.exceptions import LongitudinalError
 from src.services.orchestrator.state import patient_badge, session_badge
 from . import settings_store
@@ -61,6 +62,18 @@ _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
 
 # Session languages the pipeline supports (S1 is Ukrainian-only).
 _LANGUAGES = ("uk",)
+
+_PROCESS_ERRORS = {
+    "missing_api_key": "Додайте API-ключ Gemini у Налаштуваннях і продовжте обробку.",
+    "key_rejected": "Gemini відхилив ключ або доступ до моделі. Перевірте ключ у Налаштуваннях.",
+    "rate_limit": "Досягнуто ліміту Gemini. Спробуйте пізніше.",
+    "provider_busy": "Gemini тимчасово недоступний. Продовжте обробку пізніше.",
+    "provider_request": "Gemini відхилив запит. Перевірте налаштування моделі.",
+    "provider_timeout": "Gemini не відповів вчасно. Спробуйте продовжити обробку.",
+    "network_unavailable": "Не вдалося з’єднатися з Gemini. Перевірте інтернет і продовжте обробку.",
+    "NoSpeechError": "У записі не розпізнано мовлення. Перевірте файл і виберіть потрібний запис.",
+}
+
 
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
@@ -118,10 +131,14 @@ def _guard(method: F) -> F:
             return method(*args, **kwargs)
         except FacadeError:
             raise
+        except AudioCleanupPending as exc:
+            raise CleanupPendingError(str(exc)) from exc
         except DoctorInputError as exc:
             raise FacadeError(str(exc)) from exc
-        except (StepFailedError, RepositoryError, OSError, LongitudinalError, LLMRequestError) as exc:
-            logger.exception(f"Facade call {method.__name__} failed")
+        except StepFailedError as exc:
+            raise FacadeError(_PROCESS_ERRORS.get(exc.error_message, _GENERIC_ERROR)) from exc
+        except (RepositoryError, OSError, LongitudinalError, LLMRequestError) as exc:
+            logger.warning("Facade %s: %s", method.__name__, type(exc).__name__)
             raise FacadeError(_GENERIC_ERROR) from exc
 
     return wrapped  # type: ignore[return-value]
@@ -236,6 +253,11 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
             patient_id, wav_path, language, session_date, self._channel_map()
         )
 
+    @_guard
+    def replace_session(self, patient_id, session_id, wav_path, language, session_date):
+        return self._o.register_session(patient_id, wav_path, language, session_date,
+                                        self._channel_map(), replace_session_id=session_id)
+
     def _channel_map(self) -> dict[str, int]:
         """Roles to WAV channels according to the ``channels_swapped`` setting."""
         if self.get_settings()["channels_swapped"]:
@@ -256,7 +278,7 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         state = self._o.get_processing_state(session_id)
         return {
             "stages": state["stages"],
-            "error": _GENERIC_ERROR if state["failed_step"] else None,
+            "error": _PROCESS_ERRORS.get(state["error"], _GENERIC_ERROR) if state["failed_step"] else None,
             "finished": state["finished"],
         }
 
@@ -457,8 +479,7 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
     def get_settings(self) -> dict[str, Any]:
         """Read the saved settings; see ``facade.py`` for the response shape.
 
-        Values come from ``settings.json`` in the Orchestrator's data
-        directory (defaults if it is missing or broken). ``has_api_key`` only
+        Preferences are read from the local settings store. ``has_api_key`` only
         reports whether a key is saved; the key itself is never returned.
         """
         data_dir = Path(self._o.data_dir)
@@ -486,6 +507,8 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         changes nothing. A non-empty ``api_key`` replaces the saved key in
         the data directory's ``.env``; the key is never logged.
         """
+        if api_key and any(ch in api_key for ch in ("\x00", "\r", "\n")):
+            raise FacadeError("Некоректний API-ключ")
         if llm_provider not in settings_store.PROVIDER_ENV_KEYS:
             raise FacadeError("Непідтримуваний провайдер")
         if language not in _LANGUAGES:
@@ -495,7 +518,4 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
             "channels_swapped": bool(channels_swapped),
             "language": language,
             "llm_provider": llm_provider,
-        })
-        key = (api_key or "").strip()
-        if key:
-            settings_store.save_api_key(data_dir, llm_provider, key)
+        }, (api_key or "").strip() or None)

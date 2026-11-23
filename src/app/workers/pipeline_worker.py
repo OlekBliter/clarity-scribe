@@ -34,7 +34,7 @@ class PipelineWorker(QThread):
         try:
             self._facade.process_session(self._session_id, on_progress=self._on_progress)
         except Exception as exc:  # межа потоку: помилка не має зникнути мовчки
-            log.exception("process_session failed for %s", self._session_id)
+            log.warning("process_session failed: %s", type(exc).__name__)
             self.failed.emit(exc)
         else:
             self.succeeded.emit()

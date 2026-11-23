@@ -1,10 +1,11 @@
 """Compact medical card sections with consistent spacing."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QDate, Signal, QEvent, Property, QVariantAnimation, QRectF
+from PySide6.QtCore import Qt, Signal, QEvent, Property, QVariantAnimation, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen
 from src.app.ui.widgets.action_icon import ActionIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from src.app.ui.contact_display import birth_with_age
 from src.app.ui import metrics, strings as S
 from src.app.ui.widgets.badge import Badge
 from src.app.ui.widgets.source_chip import SourceChip
@@ -183,16 +184,7 @@ class ContactsBlock(CardBlock):
         for key, caption in S.MEDCARD_CONTACTS.items():
             value = display_value(contacts.get(key))
             if key == "birth_date":
-                raw = contacts.get(key)
-                parsed = QDate.fromString(raw or "", "yyyy-MM-dd")
-                if parsed.isValid():
-                    value = parsed.toString("dd.MM.yyyy")
-                age = contacts.get("age")
-                if age is not None:
-                    last, last_two = age % 10, age % 100
-                    unit = S.MEDCARD_AGE_UNITS[0 if last == 1 and last_two != 11 else
-                                               1 if 2 <= last <= 4 and not 12 <= last_two <= 14 else 2]
-                    value = S.MEDCARD_BIRTH_AGE.format(birth=value, age=age, unit=unit)
+                value = birth_with_age(contacts)
             self.column.addWidget(text_label(caption, "CardTitle"))
             self.column.addWidget(TextPreview(value))
 

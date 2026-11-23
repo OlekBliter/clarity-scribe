@@ -23,7 +23,7 @@ from src.database.repos import (
     TranscriptRepo,
 )
 from src.schemas.contracts import (
-    DoctorCommand,
+    DoctorCommand, SOAP_METRICS,
     S1Out,
     S2Out,
     S3Out,
@@ -59,6 +59,7 @@ from src.services.orchestrator.restore import (
     s4_to_items,
 )
 from src.services.orchestrator.errors import (
+    AudioCleanupPending,
     DoctorInputError,
     InvalidTransitionError,
     OrchestratorError,
@@ -71,6 +72,8 @@ from src.systems.audio_transcription.exceptions import AudioTranscriptionError
 from src.systems.biomarkers import AcousticBiomarkerError
 from src.systems.clinical_engine.exceptions import (
     ClinicalEngineError,
+    MissingApiKey,
+    ProviderFailure,
     LLMResponseError,
 )
 from src.systems.longitudinal import LongitudinalError
@@ -83,6 +86,8 @@ SYSTEM_ERRORS: tuple[type[Exception], ...] = (
     AudioTranscriptionError,
     AcousticBiomarkerError,
     ClinicalEngineError,
+    MissingApiKey,
+    ProviderFailure,
     LongitudinalError,
     NerError,
     ValidationError,
@@ -91,6 +96,7 @@ SYSTEM_ERRORS: tuple[type[Exception], ...] = (
 # Errors recorded in sessions.failed_step. Anything else is a bug and propagates.
 STEP_ERRORS: tuple[type[Exception], ...] = SYSTEM_ERRORS + (
     RepositoryError,
+    ImportError,
     OSError,
     OrchestratorError,
 )
@@ -135,23 +141,36 @@ def build_default_systems() -> dict[str, Any]:
     by the services themselves (VOSK_MODEL_DIR, GLINER_MODEL_DIR,
     GEMINI_API_KEY), so a missing value surfaces as a step error, not at start-up.
     """
-    from src.systems.audio_transcription import AudioTranscriptionService
-    from src.systems.biomarkers import AcousticBiomarkerService
-    from src.systems.clinical_engine import ClinicalService
-    from src.systems.longitudinal import DynamicsService
-    from src.systems.longitudinal.metrics_extractor import MetricsExtractor
-    from src.systems.longitudinal.trend_calculator import TrendCalculator
-    from src.systems.privacy_ner import PrivacyNerService
+    systems = {key: _DeferredSystem(key) for key in REQUIRED_SYSTEM_KEYS if key != "s4"}
+    systems["s4"] = systems["s3"]
+    return systems
 
-    clinical = ClinicalService()  # S3 and S4 share one service and one LLM client
-    return {
-        "s1": AudioTranscriptionService(),
-        "s2": AcousticBiomarkerService(),
-        "s3": clinical,
-        "s4": clinical,
-        "s5": DynamicsService(MetricsExtractor(), TrendCalculator()),
-        "s6": PrivacyNerService(),
-    }
+
+class _DeferredSystem:
+    def __init__(self, key):
+        self.key = key
+        self.instance = None
+        self.lock = threading.Lock()
+
+    def __getattr__(self, method):
+        from importlib import import_module
+        factories = {
+            "s1": ("audio_transcription", "AudioTranscriptionService"),
+            "s2": ("biomarkers", "AcousticBiomarkerService"),
+            "s3": ("clinical_engine", "ClinicalService"),
+            "s6": ("privacy_ner", "PrivacyNerService"),
+        }
+        with self.lock:
+            if self.instance is None:
+                if self.key == "s5":
+                    from src.systems.longitudinal import DynamicsService
+                    from src.systems.longitudinal.metrics_extractor import MetricsExtractor
+                    from src.systems.longitudinal.trend_calculator import TrendCalculator
+                    self.instance = DynamicsService(MetricsExtractor(), TrendCalculator())
+                else:
+                    module, name = factories[self.key]
+                    self.instance = getattr(import_module("src.systems." + module), name)()
+        return getattr(self.instance, method)
 
 
 class Orchestrator:
@@ -178,6 +197,8 @@ class Orchestrator:
         # Sessions currently being processed, restarted or deleted by this process.
         self._busy_sessions: set[str] = set()
         self._busy_lock = threading.Lock()
+        self._pipeline_lock = threading.Lock()
+        self._processing_session: str | None = None
 
         self.patients_repo = PatientsRepo()
         self.sessions_repo = SessionsRepo()
@@ -249,10 +270,13 @@ class Orchestrator:
     @staticmethod
     def _error_text(exc: Exception) -> str:
         """Error text stored in the database; never includes pydantic input values."""
+        if isinstance(exc, ProviderFailure):
+            return exc.reason
+        if isinstance(exc, MissingApiKey):
+            return "missing_api_key"
         if isinstance(exc, ValidationError):
-            locations = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
-            return f"ValidationError: {exc.error_count()} error(s) in {locations}"
-        return f"{type(exc).__name__}: {exc}"
+            return f"ValidationError: {exc.error_count()} error(s)"
+        return type(exc).__name__
 
     def _run_step(
         self,
@@ -382,6 +406,8 @@ class Orchestrator:
             if isinstance(output, S3Out):
                 output.check_evidence(known_segment_ids)
             else:
+                if set(output.objective.biomarker_refs) - SOAP_METRICS:
+                    raise ValueError("Unknown objective biomarker")
                 unknown = set(output.subjective.source_segments) - known_segment_ids
                 if unknown:
                     raise ValueError("SOAP source_segments reference unknown transcript segments")
@@ -576,6 +602,17 @@ class Orchestrator:
         with self.db.transaction() as conn:
             return self.patients_repo.create(conn, cleaned)
 
+    @contextmanager
+    def _single_operation(self, processing_session=None):
+        if not self._pipeline_lock.acquire(blocking=False):
+            raise DoctorInputError("Триває обробка іншого запису.")
+        self._processing_session = processing_session
+        try:
+            yield
+        finally:
+            self._processing_session = None
+            self._pipeline_lock.release()
+
     def register_session(
         self,
         patient_id: str,
@@ -583,7 +620,14 @@ class Orchestrator:
         language_hint: str,
         session_date: str,
         channel_map: dict[str, int] | None = None,
+        *, replace_session_id: str | None = None,
     ) -> str:
+        with self._single_operation():
+            return self._register_session(patient_id, source_wav, language_hint, session_date,
+                                          channel_map, replace_session_id)
+
+    def _register_session(self, patient_id, source_wav, language_hint, session_date,
+                          channel_map, replace_session_id) -> str:
         """Create a new session or restart the latest unfinished session.
 
         The slow WAV copy happens before the transaction, so the write lock is
@@ -627,10 +671,17 @@ class Orchestrator:
                     "drafted", "approved"
                 )
 
+                if replace_session_id is not None and (not unfinished or latest["session_id"] != replace_session_id):
+                    raise DoctorInputError("Цю сесію вже не можна замінити.")
+                if unfinished and replace_session_id is None:
+                    raise DoctorInputError("Спершу продовжте або видаліть незавершену сесію.")
                 if unfinished:
                     session_id = latest["session_id"]
                     # Refuses a restart while the session is being processed.
                     claims.enter_context(self._claim_session(session_id))
+                    card = self.cards_repo.find(conn, patient_id)
+                    if card and card["source_session_id"] == session_id and card["status"] == "approved":
+                        raise DoctorInputError("Медкартку підтверджено. Продовжте обробку зі збереженим записом.")
                     retry_path = self._audio_path(patient_id, session_id)
                     backup_path = self._move_aside(retry_path)
                     install_staged(staged, self.data_dir, patient_id, session_id)
@@ -684,13 +735,9 @@ class Orchestrator:
             claims.close()
 
     def _get_next_step(self, session_id: str) -> Step | None:
-        """Return the next executable step, refusing implicit failed-step retries."""
+        """Resolve the next step from committed session and document state."""
         with self.db.read() as conn:
             session = self.sessions_repo.get(conn, session_id)
-            if session.get("failed_step") is not None:
-                raise InvalidTransitionError(
-                    "Обробка завершилася помилкою. Додайте запис повторно."
-                )
             card = self.cards_repo.find(conn, session["patient_id"])
             note = self.soap_repo.find(conn, session_id)
         return next_step(session, card, note)
@@ -711,7 +758,9 @@ class Orchestrator:
 
     def run_next(self, session_id: str) -> Step | None:
         """Execute a single pending pipeline step, if one exists."""
-        with self._claim_session(session_id):
+        with self._single_operation(session_id), self._claim_session(session_id):
+            with self.db.transaction() as conn:
+                self.sessions_repo.clear_failure(conn, session_id)
             current_step = self._get_next_step(session_id)
             if current_step is not None:
                 self._execute_step(session_id, current_step)
@@ -723,7 +772,9 @@ class Orchestrator:
         on_progress: Callable[[Step, str], None] | None = None,
     ) -> None:
         """Execute all pending steps, reporting 'running' and 'done' events."""
-        with self._claim_session(session_id):
+        with self._single_operation(session_id), self._claim_session(session_id):
+            with self.db.transaction() as conn:
+                self.sessions_repo.clear_failure(conn, session_id)
             for _ in range(len(Step) + 1):  # one spare iteration for the final None check
                 current_step = self._get_next_step(session_id)
                 if current_step is None:
@@ -761,6 +812,7 @@ class Orchestrator:
                 failed_step,
                 card["status"] if card else None,
                 note["status"] if note else None,
+                running=self._processing_session == session_id,
             ),
             "error": session.get("error") if failed_step else None,
             "failed_step": failed_step,
@@ -860,8 +912,8 @@ class Orchestrator:
                         "Першу сесію не можна видалити, поки є інші."
                     )
             self.sessions_repo.delete(conn, session_id)
-
-        delete_session_dir(self.data_dir, patient_id, session_id)
+            self._queue_cleanup(conn, patient_id, session_id)
+        self._finish_cleanup(patient_id, session_id)
 
     def delete_patient(self, patient_id: str) -> None:
         """Delete a patient and all records, then remove stored audio.
@@ -883,8 +935,34 @@ class Orchestrator:
                 if current != known:
                     raise DoctorInputError("Дані пацієнта змінилися. Спробуйте ще раз.")
                 self.patients_repo.delete(conn, patient_id)
+                self._queue_cleanup(conn, patient_id, "")
+        self._finish_cleanup(patient_id, "")
 
-        delete_patient_dir(self.data_dir, patient_id)
+    def _queue_cleanup(self, conn, patient_id, session_id):
+        conn.execute("INSERT OR IGNORE INTO pending_audio_cleanup VALUES (?, ?)", (patient_id, session_id))
+
+    def _finish_cleanup(self, patient_id, session_id):
+        try:
+            if session_id:
+                delete_session_dir(self.data_dir, patient_id, session_id)
+            else:
+                delete_patient_dir(self.data_dir, patient_id)
+        except OSError:
+            raise AudioCleanupPending("Запис видалено з бази. Аудіо ще на диску. "
+                                   "Очищення повториться при запуску.") from None
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM pending_audio_cleanup WHERE patient_id=? AND session_id=?",
+                         (patient_id, session_id))
+
+    def retry_audio_cleanup(self):
+        with self.db.read() as conn:
+            pending = conn.execute("SELECT patient_id, session_id FROM pending_audio_cleanup").fetchall()
+        for patient_id, session_id in pending:
+            try:
+                self._finish_cleanup(patient_id, session_id)
+            except DoctorInputError:
+                logger.warning("Pending audio cleanup deferred")
+
 
     def get_dynamics(self, patient_id: str) -> S5Out | None:
         """Calculate S5 results for at least two approved patient sessions."""

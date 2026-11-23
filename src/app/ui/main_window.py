@@ -45,10 +45,16 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         self.stack = QStackedWidget()
+        self._activity = QPushButton()
+        self._activity.setObjectName("OutlineButton")
+        self._activity.clicked.connect(self._open_active)
+        self._activity.hide()
+        content_layout.addWidget(self._activity)
         content_layout.addWidget(self.stack)
         root.addWidget(content, stretch=1)
 
         self.router = Router(self.stack, self)
+        self.router.resolve_params = self._resolve_params
         self._register_routes()
         self.router.route_changed.connect(self._on_route_changed)
 
@@ -108,6 +114,34 @@ class MainWindow(QMainWindow):
             Route.ARCHIVE,
             lambda: PlaceholderScreen(strings.ARCHIVE_TITLE, f, r, show_back=False),
         )
+
+    def set_processing_notice(self, session):
+        self._activity.setVisible(session is not None)
+        self._activity.setText(strings.ADD_ACTIVE.format(session=session or ""))
+
+    def _open_active(self):
+        page = self.router.screen(Route.ADD_SESSION)
+        if self.router.current_route != Route.ADD_SESSION and page and page.is_processing():
+            self.router.go(Route.ADD_SESSION, **page.active_route())
+
+    def _resolve_params(self, route, params):
+        page = self.router.screen(Route.ADD_SESSION)
+        if route == Route.ADD_SESSION and page and page.is_processing():
+            active = page.active_route()
+            if (params.get("patient_id") != active["patient_id"] or
+                    params.get("session_id") not in (None, active.get("session_id"))):
+                self.toast.show_message(strings.ADD_BUSY)
+                return None
+            return active
+        return params
+
+    def closeEvent(self, event):
+        page = self.router.screen(Route.ADD_SESSION)
+        if page and page.is_processing():
+            event.ignore()
+            self.toast.show_message(strings.ADD_WAIT_CLOSE)
+            return
+        super().closeEvent(event)
 
     def _on_route_changed(self, route: Route, _params: dict) -> None:
         active = _NAV_GROUP.get(route, Route.PATIENTS)

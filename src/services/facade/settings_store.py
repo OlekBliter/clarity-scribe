@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from threading import Lock
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +17,21 @@ DEFAULTS: dict[str, Any] = {
     "llm_provider": "gemini",
 }
 
+_write_lock = Lock()
+
 PROVIDER_ENV_KEYS = {"gemini": "GEMINI_API_KEY"}
 
 
 def load(data_dir: Path) -> dict[str, Any]:
     """Load settings, falling back to defaults for missing or invalid data."""
+    packed = dotenv_values(data_dir / ".env", interpolate=False).get("CLARITYSCRIBE_SETTINGS")
+    if packed:
+        try:
+            values = json.loads(packed)
+            if isinstance(values, dict):
+                return {**DEFAULTS, **values}
+        except ValueError:
+            pass
     settings_path = Path(data_dir) / "settings.json"
     try:
         values = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -35,56 +46,32 @@ def load(data_dir: Path) -> dict[str, Any]:
     return result
 
 
-def save(data_dir: Path, values: dict[str, Any]) -> None:
-    """Atomically save application settings without API-key fields."""
-    directory = Path(data_dir)
-    directory.mkdir(parents=True, exist_ok=True)
+def save(data_dir: Path, values: dict[str, Any], api_key: str | None = None) -> None:
+    """Commit preferences and a replacement key together, preserving unrelated dotenv entries."""
+    with _write_lock:
+        _commit(data_dir, values, api_key)
 
-    settings_path = directory / "settings.json"
-    secret_names = {"api_key", "gemini_api_key", "llm_api_key"}
-    saved_values = {
-        key: value
-        for key, value in values.items()
-        if key not in PROVIDER_ENV_KEYS.values()
-        and key.lower() not in secret_names
-        and not key.upper().endswith("_API_KEY")
-    }
-    temporary_path: Path | None = None
+
+def _commit(data_dir: Path, values: dict[str, Any], api_key: str | None) -> None:
+    target = data_dir / ".env"
+    options = {key: values[key] for key in DEFAULTS}
+    env_name = PROVIDER_ENV_KEYS[options["llm_provider"]]
+    if api_key and any(ch in api_key for ch in ("\x00", "\r", "\n")):
+        raise ValueError("Некоректний API-ключ")
+    with tempfile.NamedTemporaryFile(dir=data_dir, delete=False) as handle:
+        stage = Path(handle.name)
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=directory,
-            prefix=".settings.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            json.dump(saved_values, temporary, ensure_ascii=False)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            temporary_path = Path(temporary.name)
-
-        os.replace(temporary_path, settings_path)
-        temporary_path = None
+        if target.exists():
+            stage.write_bytes(target.read_bytes())
+        set_key(str(stage), "CLARITYSCRIBE_SETTINGS", json.dumps(options))
+        if api_key:
+            set_key(str(stage), env_name, api_key)
+        os.chmod(stage, 0o600)
+        os.replace(stage, target)
+        if api_key:
+            os.environ[env_name] = api_key
     finally:
-        if temporary_path is not None:
-            try:
-                temporary_path.unlink()
-            except FileNotFoundError:
-                pass
-
-
-def save_api_key(data_dir: Path, provider: str, key: str) -> None:
-    """Save a provider key in the local .env file and current environment."""
-    provider = (provider or "").strip().lower()
-    env_name = PROVIDER_ENV_KEYS.get(provider)
-    if env_name is None:
-        raise ValueError("Unknown LLM provider")
-
-    directory = Path(data_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    set_key(str(directory / ".env"), env_name, key)
-    os.environ[env_name] = key
+        stage.unlink(missing_ok=True)
 
 
 def has_api_key(data_dir: Path, provider: str) -> bool:

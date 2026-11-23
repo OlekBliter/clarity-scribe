@@ -1,6 +1,8 @@
 """Session review screen: async loading, local editing, and audio navigation."""
 from __future__ import annotations
 
+from src.services.facade.facade import CleanupPendingError
+
 import math
 from datetime import datetime
 from functools import partial
@@ -10,6 +12,7 @@ from PySide6.QtGui import QHideEvent
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.app.ui import strings as S
+from src.app.ui.errors import error_message
 from src.app.ui.export_pdf import ask_save_path, export_soap
 from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Router
@@ -121,7 +124,7 @@ class SessionScreen(BaseScreen):
         """Navigate back on SOAP failure; allow partial auxiliary-data failures."""
         if not self._active or generation != self._generation:
             return
-        message = str(error) or S.ERROR_GENERIC
+        message = error_message(error)
         self._errors[key] = message
         self._pending.discard(key)
         if key == "soap":
@@ -240,7 +243,7 @@ class SessionScreen(BaseScreen):
                   on_error=partial(complete, failure or self._action_error))
 
     def _action_error(self, error: BaseException) -> None:
-        self._toast(str(error) or S.ERROR_GENERIC)
+        self._toast(error_message(error))
 
     def _valid_edits(self, edits) -> bool:
         for edit in edits:
@@ -299,7 +302,17 @@ class SessionScreen(BaseScreen):
             self._toast(S.SESSION_DELETED)
             self.router.back()
 
-        self._request(self.facade.delete_session, self.session_id, success=deleted)
+        self.view.audio.set_source(None)
+
+        def failed(error):
+            if isinstance(error, CleanupPendingError):
+                self.router.back()
+                self._toast(str(error))
+                return
+            self.view.audio.set_source((self._data.get("audio") or {}).get("path"))
+            self._action_error(error)
+
+        self._request(self.facade.delete_session, self.session_id, success=deleted, failure=failed)
 
     def _audio_error(self, error: QMediaPlayer.Error, message: str) -> None:
         """Disable waveform navigation if decoding the selected file fails."""
@@ -357,10 +370,10 @@ class SessionScreen(BaseScreen):
             return
         try:
             export_soap(data, path)
-        except OSError as exc:
-            self._toast(S.PDF_WRITE_ERROR.format(error=str(exc)))
-        except Exception as exc:
-            self._toast(S.PDF_EXPORT_ERROR.format(error=str(exc)))
+        except OSError:
+            self._toast(S.PDF_WRITE_ERROR)
+        except Exception:
+            self._toast(S.PDF_EXPORT_ERROR)
         else:
             self._toast(S.SESSION_SAVED)
 
@@ -381,5 +394,5 @@ class SessionScreen(BaseScreen):
         """Stop playback and invalidate pending requests when navigating away."""
         self._active = False
         self._generation += 1
-        self.view.audio.player.pause()
+        self.view.audio.set_source(None)
         super().hideEvent(event)
