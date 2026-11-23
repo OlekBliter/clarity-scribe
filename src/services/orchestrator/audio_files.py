@@ -69,7 +69,7 @@ def stage_wav(source: Path | str, data_dir: Path | str) -> Path:
 
 
 def discard_staged(staged: Path | None) -> None:
-    """Remove a staged file if it still exists; log filesystem failures."""
+    """Remove a staged file if it still exists."""
     if staged is None:
         return
     try:
@@ -177,18 +177,16 @@ def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:
 
 
 def delete_session_dir(data_dir: Path | str, patient_id: str, session_id: str) -> None:
-    """Remove session audio after database commit; log filesystem failures."""
+    """Remove session audio after database commit."""
     session_dir = _session_dir(data_dir, patient_id, session_id)
     try:
         shutil.rmtree(session_dir)
     except FileNotFoundError:
         return
-    except OSError as exc:
-        logger.warning("Failed to delete session directory %s: %s", session_dir, exc)
 
 
 def delete_patient_dir(data_dir: Path | str, patient_id: str) -> None:
-    """Remove all patient audio after database commit; log failures."""
+    """Remove all patient audio after database commit."""
     # Apply the same identifier validation used by session paths.
     _session_dir(data_dir, patient_id, "validation")
     patient_dir = Path(data_dir) / "audio" / patient_id
@@ -196,5 +194,3 @@ def delete_patient_dir(data_dir: Path | str, patient_id: str) -> None:
         shutil.rmtree(patient_dir)
     except FileNotFoundError:
         return
-    except OSError as exc:
-        logger.warning("Failed to delete patient directory %s: %s", patient_dir, exc)

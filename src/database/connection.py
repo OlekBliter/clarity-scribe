@@ -60,6 +60,9 @@ class Database:
             elif missing_tables:
                 missing = ", ".join(sorted(missing_tables))
                 raise DatabaseError(f"Database schema is incomplete. Missing tables: {missing}.")
+            conn.execute("CREATE TABLE IF NOT EXISTS pending_audio_cleanup "
+                         "(patient_id TEXT NOT NULL, session_id TEXT NOT NULL, PRIMARY KEY(patient_id,session_id))")
+            conn.commit()
         finally:
             conn.close()
 

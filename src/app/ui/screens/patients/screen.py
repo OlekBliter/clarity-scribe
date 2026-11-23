@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from src.services.facade.facade import CleanupPendingError
+
 from typing import Any
 
 from PySide6.QtCore import Qt
@@ -94,4 +96,9 @@ class PatientsScreen(BaseScreen):
             return
         self.call(self.facade.delete_patient, patient_id,
                   on_success=lambda _r=None: self._load(self._search.text().strip()),
-                  on_error=lambda err: show_error(self, err))
+                  on_error=self._delete_failed)
+
+    def _delete_failed(self, error):
+        if isinstance(error, CleanupPendingError):
+            self._load(self._search.text().strip())
+        show_error(self, error)

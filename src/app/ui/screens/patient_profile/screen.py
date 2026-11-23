@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from src.services.facade.facade import CleanupPendingError
+
 from typing import Any
 
 from PySide6.QtCore import Qt
@@ -184,7 +186,7 @@ class PatientProfileScreen(BaseScreen):
             self.facade.delete_patient,
             self._patient_id,
             on_success=self._on_patient_deleted,
-            on_error=lambda err: show_error(self, err),
+            on_error=lambda err: self._delete_failed(err, patient=True),
         )
 
     def _on_patient_deleted(self, _result=None) -> None:
@@ -202,8 +204,16 @@ class PatientProfileScreen(BaseScreen):
             self.facade.delete_session,
             session["session_id"],
             on_success=lambda _r=None: self.on_open(patient_id=self._patient_id),
-            on_error=lambda err: show_error(self, err),
+            on_error=lambda err: self._delete_failed(err, patient=False),
         )
+
+    def _delete_failed(self, error, patient):
+        if isinstance(error, CleanupPendingError):
+            if patient:
+                self.router.go_root(Route.PATIENTS)
+            else:
+                self.on_open(patient_id=self._patient_id)
+        show_error(self, error)
 
     def _open_dynamics(self) -> None:
         """Відкриває динаміку; страховка на випадок, якщо кнопку активовано без даних."""

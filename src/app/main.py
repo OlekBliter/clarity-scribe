@@ -10,7 +10,8 @@ import argparse
 import logging
 import sys
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QLockFile
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from src.app.ui.main_window import MainWindow
 from src.app.ui.theme.loader import load_theme
@@ -44,6 +45,15 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv[:1])
     app.setApplicationName("ClarityScribe")
     load_theme(app)
+
+    if not args.stub:
+        from src.services.facade.factory import data_directory
+        instance_lock = QLockFile(str(data_directory() / "application.lock"))
+        instance_lock.setStaleLockTime(0)
+        if not instance_lock.tryLock(0):
+            QMessageBox.warning(None, "ClarityScribe",
+                                "Не вдалося отримати доступ до каталогу даних. Перевірте, чи вже відкрито застосунок.")
+            return 1
 
     window = MainWindow(make_facade(args.stub))
     window.show()

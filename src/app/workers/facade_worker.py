@@ -31,7 +31,7 @@ class FacadeWorker(QRunnable):
         try:
             result = self._fn(*self._args, **self._kwargs)
         except Exception as exc:  # межа потоку: помилка не має зникнути мовчки
-            log.exception("Помилка у фоновому виклику фасаду")
+            log.warning("Facade worker failed: %s", type(exc).__name__)
             self.signals.failed.emit(exc)
         else:
             self.signals.finished.emit(result)

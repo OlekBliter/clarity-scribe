@@ -13,18 +13,7 @@
 
 Екран обробки керується станом, а не прапорцями:
   працює        (власний прапорець воркера) етапи, кнопок немає;
-  помилка       (state["error"]) етапи + текст помилки; «До профілю» і
-                «Додати запис повторно»: реальний фасад не повторює збійний крок,
-                а при новому add_session перезапускає останню незавершену
-                сесію (той самий номер, новий файл і дата);
-  завершено     «До профілю пацієнта»;
-  перервано     (не працює, не помилка, не завершено, напр. застосунок
-                перезапускали): «До профілю» і «Продовжити обробку»
-                (process_session відновлює з наступного кроку).
-У реальному фасаді етап «running» позначає перший незавершений, навіть коли
-нічого не виконується, тому «працює» визначаємо лише власним прапорцем.
-
-TODO (полірування): якщо лікар закриває застосунок під час обробки, попередити.
+  помилка або переривання: продовження зі збереженим WAV або підтверджена заміна.
 """
 from __future__ import annotations
 
@@ -39,6 +28,7 @@ from src.app.ui import audio_meta, metrics, strings
 from src.app.ui.errors import show_error
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
+from src.app.ui.widgets.confirm import confirm_destructive
 from src.app.ui.widgets.breadcrumb import Breadcrumb
 from src.app.ui.widgets.buttons import primary_button, secondary_button
 from src.app.ui.widgets.drop_zone import DropZone
@@ -60,6 +50,10 @@ class AddSessionScreen(BaseScreen):
         self._session_id: str | None = None
         self._worker: PipelineWorker | None = None
         self._pipeline_active = False  # від старту воркера до його сигналу (головний потік)
+        self._registering = False
+        self._replacing = False
+        self._patient_name = ""
+        self._generation = 0
         self._state_request = 0        # щоб ігнорувати застарілі відповіді стану
 
         root = QVBoxLayout(self)
@@ -195,7 +189,7 @@ class AddSessionScreen(BaseScreen):
         self._to_profile = primary_button(strings.ADD_TO_PROFILE)
         self._leave.clicked.connect(self._open_profile)
         self._to_profile.clicked.connect(self._open_profile)
-        self._repeat.clicked.connect(self._show_form_mode)
+        self._repeat.clicked.connect(self._replace_form)
         self._continue.clicked.connect(self._start_pipeline)
         for btn in (self._repeat, self._continue, self._to_profile, self._leave):
             col.addWidget(btn)  # головна над другорядною «До профілю»
@@ -239,25 +233,56 @@ class AddSessionScreen(BaseScreen):
 
     # ------------------------------------------------------------------ режими
     def on_open(self, **params: Any) -> None:
-        self._patient_id = params["patient_id"]
-        self.call(self.facade.get_patient_profile, self._patient_id,
-                  on_success=lambda p: self._crumb.set_path(
-                      [strings.NAV_PATIENTS, p["name"], strings.ADD_CRUMB]))
-        if self._is_running():
-            # Обробка йде: показуємо її прогрес (одночасно обробляється одна сесія).
-            self._show_progress_mode(resumed=self._form_hidden)
-            self._refresh_state()
-            return
-        session_id = params.get("session_id")
-        if session_id:
-            self._session_id = session_id
+        if self.is_processing():
             self._show_progress_mode(resumed=True)
             self._refresh_state()
-        else:
-            self._show_form_mode()
+            return
+        self._generation += 1
+        self._state_request += 1
+        generation = self._generation
+        self._patient_id = params["patient_id"]
+        self._session_id = None
+        self._replacing = False
+        self._show_progress_mode(resumed=True)
+        self._crumb.set_path([strings.NAV_PATIENTS, strings.ADD_CRUMB])
+        self._stages.reset()
+        self._number.clear()
+
+        def loaded(profile):
+            if generation != self._generation:
+                return
+            self._patient_name = profile["name"] or strings.NO_NAME
+            self._crumb.set_path([strings.NAV_PATIENTS, self._patient_name, strings.ADD_CRUMB])
+            sessions = profile["sessions"]
+            requested = params.get("session_id")
+            session = next((s for s in sessions if s["session_id"] == requested), None) if requested else next(
+                (s for s in sessions if not s["is_ready"]), None)
+            if requested and session is None:
+                show_error(self, strings.ADD_SESSION_MISSING)
+                self._leave.show()
+                return
+            if session is not None:
+                self._session_id = session["session_id"]
+                self._number.setText(strings.ADD_NUMBER_FMT.format(number=session["number"]))
+                self._refresh_state()
+            else:
+                number = 1 + max((s["number"] for s in sessions), default=0)
+                self._number.setText(strings.ADD_NUMBER_FMT.format(number=number))
+                self._show_form_mode()
+
+        def failed(error):
+            if generation == self._generation:
+                show_error(self, error)
+                self._leave.show()
+
+        self.call(self.facade.get_patient_profile, self._patient_id, on_success=loaded, on_error=failed)
+
+    def _replace_form(self):
+        self._replacing = True
+        self._show_form_mode()
 
     def _show_form_mode(self) -> None:
-        self._session_id = None
+        self._state_request += 1
         self._drop.clear()
         self._date.setDate(QDate.currentDate())
         self._stages.reset()
@@ -269,16 +294,11 @@ class AddSessionScreen(BaseScreen):
         self._set_side_visible(False)
         self._set_form_enabled(True)
         self._update_start()
-        self._number.setText("")
-        self.call(self.facade.next_session_number, self._patient_id,
-                  on_success=lambda n: self._number.setText(strings.ADD_NUMBER_FMT.format(number=n)))
 
     def _show_progress_mode(self, resumed: bool = False) -> None:
         """Свіжий запуск: форма із запитом лишається ліворуч (вимкнена), етапи праворуч.
         Відкрита готова/перервана сесія: форми немає, лише етапи."""
         self._set_form_enabled(False)
-        if resumed:
-            self._number.setText("")
         self._start.hide()
         self._start_hint.hide()
         self._hide_actions()
@@ -313,31 +333,46 @@ class AddSessionScreen(BaseScreen):
         self._start.setEnabled(has_file)
         self._start_hint.setVisible(not has_file)
 
-    def _is_running(self) -> bool:
-        return self._pipeline_active or (self._worker is not None and self._worker.isRunning())
+    def is_processing(self) -> bool:
+        return self._registering or self._pipeline_active or (self._worker is not None and self._worker.isRunning())
 
     # ------------------------------------------------------------------ запуск
     def _on_start(self) -> None:
         path = self._drop.path
-        if not path or self._patient_id is None:
+        if self.is_processing() or not path or self._patient_id is None:
             return
         self._set_form_enabled(False)
-        self.call(self.facade.add_session, self._patient_id, path,
+        if self._replacing and not confirm_destructive(self, strings.ADD_REPEAT,
+                                                       strings.ADD_REPLACE_WARNING, strings.ADD_REPEAT):
+            self._set_form_enabled(True)
+            return
+        self._registering = True
+        self._notify_activity()
+        action = self.facade.replace_session if self._replacing else self.facade.add_session
+        ids = (self._patient_id, self._session_id) if self._replacing else (self._patient_id,)
+        self.call(action, *ids, path,
                   self._lang.currentData(), self._date.date().toString(_ISO_DATE),
                   on_success=self._on_session_added, on_error=self._on_add_failed)
 
     def _on_session_added(self, session_id: str) -> None:
+        self._registering = False
+        self._replacing = False
         self._session_id = session_id
         self._show_progress_mode()
         self._start_pipeline()
 
     def _on_add_failed(self, exc: BaseException) -> None:
+        self._registering = False
+        self._notify_activity()
+        if self._form_hidden:
+            self._show_form_mode()
+        else:
+            self._set_form_enabled(True)
         show_error(self, exc)
-        self._set_form_enabled(True)  # сесію не створено: форма лишається як була
 
     def _start_pipeline(self) -> None:
         """Запускає (або повторює) обробку поточної сесії у фоновому потоці."""
-        if self._session_id is None or self._is_running():
+        if self._session_id is None or self.is_processing():
             return
         self._pipeline_active = True
         self._hide_actions()
@@ -345,15 +380,32 @@ class AddSessionScreen(BaseScreen):
         self._worker.progress.connect(self._on_progress)
         self._worker.succeeded.connect(self._on_succeeded)
         self._worker.failed.connect(self._on_failed)
+        self._worker.finished.connect(self._worker_finished)
         self._worker.start()
+        self._notify_activity()
         self._refresh_state()
 
     # ---------------------------------------------------- прогрес і завершення
+    def active_route(self):
+        params = {"patient_id": self._patient_id}
+        if self._session_id:
+            params["session_id"] = self._session_id
+        return params
+
+    def _notify_activity(self):
+        label = f"{self._patient_name} · {self._number.text()}" if self.is_processing() else None
+        self.window().set_processing_notice(label)
+
+    def _worker_finished(self):
+        self._notify_activity()
+        self._refresh_state()
+
     def _on_progress(self, _step: str, _state: str) -> None:
         self._refresh_state()  # назви кроків не розбираємо: беремо стан із фасаду
 
     def _on_succeeded(self) -> None:
         self._pipeline_active = False
+        self._notify_activity()
         self._refresh_state()
         toast = getattr(self.window(), "toast", None)
         if toast is not None:
@@ -361,6 +413,7 @@ class AddSessionScreen(BaseScreen):
 
     def _on_failed(self, exc: BaseException) -> None:
         self._pipeline_active = False
+        self._notify_activity()
         show_error(self, exc)
         self._refresh_state()  # стан «помилка» покаже кнопку «Повторити обробку»
 
@@ -371,7 +424,7 @@ class AddSessionScreen(BaseScreen):
         rid = self._state_request
         self.call(self.facade.get_processing_state, self._session_id,
                   on_success=lambda state: self._apply_state(state, rid),
-                  on_error=lambda exc: log.warning("get_processing_state: %s", exc))
+                  on_error=lambda exc: show_error(self, exc) if rid == self._state_request else None)
 
     def _apply_state(self, state: dict, rid: int) -> None:
         if rid != self._state_request:
@@ -383,7 +436,7 @@ class AddSessionScreen(BaseScreen):
 
     def _apply_actions(self, state: dict) -> None:
         """Підказка й кнопки залежать лише від стану обробки (див. docstring модуля)."""
-        running = self._is_running()
+        running = self.is_processing()
         self._stages.set_footer_visible(running)
         self._hide_actions()
         if running:
@@ -395,9 +448,11 @@ class AddSessionScreen(BaseScreen):
         if state["error"]:
             self._hint.setText(strings.ADD_FAILED_HINT)
             self._repeat.show()
+            self._continue.show()
         else:
             self._hint.setText(strings.ADD_UNFINISHED_HINT)
             self._continue.show()
+            self._repeat.show()
         self._hint.show()
 
     def _open_profile(self) -> None:

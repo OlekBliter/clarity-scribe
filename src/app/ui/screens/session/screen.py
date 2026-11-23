@@ -1,6 +1,8 @@
 """Session review screen: async loading, local editing, and audio navigation."""
 from __future__ import annotations
 
+from src.services.facade.facade import CleanupPendingError
+
 import math
 from datetime import datetime
 from functools import partial
@@ -299,7 +301,17 @@ class SessionScreen(BaseScreen):
             self._toast(S.SESSION_DELETED)
             self.router.back()
 
-        self._request(self.facade.delete_session, self.session_id, success=deleted)
+        self.view.audio.set_source(None)
+
+        def failed(error):
+            if isinstance(error, CleanupPendingError):
+                self.router.back()
+                self._toast(str(error))
+                return
+            self.view.audio.set_source((self._data.get("audio") or {}).get("path"))
+            self._action_error(error)
+
+        self._request(self.facade.delete_session, self.session_id, success=deleted, failure=failed)
 
     def _audio_error(self, error: QMediaPlayer.Error, message: str) -> None:
         """Disable waveform navigation if decoding the selected file fails."""
@@ -381,5 +393,5 @@ class SessionScreen(BaseScreen):
         """Stop playback and invalidate pending requests when navigating away."""
         self._active = False
         self._generation += 1
-        self.view.audio.player.pause()
+        self.view.audio.set_source(None)
         super().hideEvent(event)

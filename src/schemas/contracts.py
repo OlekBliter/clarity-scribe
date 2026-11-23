@@ -247,6 +247,9 @@ class Subjective(_Text):
     source_segments: list[int] = Field(default_factory=list)
 
 
+SOAP_METRICS = frozenset(RawDspFeatures.model_fields) | (frozenset(InferredIndices.model_fields) - {"intrasession_dynamics"})
+
+
 class Objective(_Text):
     biomarker_refs: list[str] = Field(default_factory=list)
 

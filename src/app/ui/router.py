@@ -28,11 +28,15 @@ class Router(QObject):
         self._stack = stack
         self._factories: dict[Route, Callable[[], QWidget]] = {}
         self._screens: dict[Route, QWidget] = {}
+        self.resolve_params = lambda route, params: params
         self._history: list[tuple[Route, dict]] = []
 
     @property
     def current_route(self) -> Route | None:
         return self._history[-1][0] if self._history else None
+
+    def screen(self, route):
+        return self._screens.get(route)
 
     def register(self, route: Route, factory: Callable[[], QWidget]) -> None:
         """Екран створюється лениво, при першому відкритті."""
@@ -40,6 +44,9 @@ class Router(QObject):
 
     def go(self, route: Route, **params) -> None:
         """Відкрити екран; params передаються в screen.on_open(**params)."""
+        params = self.resolve_params(route, params)
+        if params is None:
+            return
         self._history.append((route, params))
         self._show(route, params)
 
@@ -50,8 +57,12 @@ class Router(QObject):
 
     def back(self) -> None:
         if len(self._history) > 1:
+            route, params = self._history[-2]
+            params = self.resolve_params(route, params)
+            if params is None:
+                return
             self._history.pop()
-            route, params = self._history[-1]
+            self._history[-1] = (route, params)
             self._show(route, params)
 
     def _show(self, route: Route, params: dict) -> None:
