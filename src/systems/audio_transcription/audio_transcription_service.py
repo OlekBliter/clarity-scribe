@@ -1,5 +1,6 @@
 from .channel_splitter import split
 from .vosk_transcription import load_model, recognize_words, create_output_segments, collect_metadata
+from .exceptions import NoSpeechError
 from .exceptions import AudioTranscriptionError, InvalidAudioError, UnsupportedLanguageError
 from src.schemas.contracts import S1Out
 
@@ -90,6 +91,8 @@ class AudioTranscriptionService:
             raise InvalidAudioError("Audio transcription failed.") from error
 
         segments = create_output_segments(segments_patient, segments_doctor)
+        if not segments:
+            raise NoSpeechError()
         metadata = collect_metadata(segments, tracks["DOCTOR"])
 
         result = {

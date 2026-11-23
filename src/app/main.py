@@ -25,14 +25,7 @@ def make_facade(use_stub: bool):
         from src.services.facade import ClarityScribeFacadeStub
         return ClarityScribeFacadeStub(step_delay=0.6)
     from src.services.facade import create_facade
-    try:
-        return create_facade(False)
-    except Exception as exc:  # noqa: BLE001 (немає залежності/моделі/.env: показуємо причину)
-        logging.getLogger(__name__).exception("Не вдалося створити реальний фасад")
-        raise SystemExit(
-            f"Не вдалося запустити реальний фасад: {exc}\n"
-            "Перевірте .env, моделі та залежності (requirements.txt); "
-            "для розробки UI запустіть з --stub.") from exc
+    return create_facade(False)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,16 +39,25 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName("ClarityScribe")
     load_theme(app)
 
-    if not args.stub:
-        from src.services.facade.factory import data_directory
-        instance_lock = QLockFile(str(data_directory() / "application.lock"))
-        instance_lock.setStaleLockTime(0)
-        if not instance_lock.tryLock(0):
-            QMessageBox.warning(None, "ClarityScribe",
-                                "Не вдалося отримати доступ до каталогу даних. Перевірте, чи вже відкрито застосунок.")
-            return 1
+    try:
+        if not args.stub:
+            from src.services.facade.factory import data_directory
+            directory = data_directory()
+            instance_lock = QLockFile(str(directory / "application.lock"))
+            instance_lock.setStaleLockTime(0)
+            if not instance_lock.tryLock(0):
+                QMessageBox.warning(None, "ClarityScribe",
+                                    "Не вдалося отримати доступ до каталогу даних. Перевірте, чи вже відкрито застосунок.")
+                return 1
+            from src.services.orchestrator.audio_files import clean_staged_imports
+            clean_staged_imports(directory)
 
-    window = MainWindow(make_facade(args.stub))
+        window = MainWindow(make_facade(args.stub))
+    except Exception as exc:
+        logging.getLogger(__name__).error("Startup failed: %s", type(exc).__name__)
+        QMessageBox.critical(None, "ClarityScribe",
+                             "Не вдалося запустити застосунок. Перевірте доступ до каталогу даних і встановлені залежності.")
+        return 1
     window.show()
     return app.exec()
 

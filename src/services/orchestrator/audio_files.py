@@ -3,10 +3,8 @@
 import logging
 import os
 import shutil
-import sys
 import tempfile
 import wave
-from array import array
 from pathlib import Path
 
 from src.services.orchestrator.errors import DoctorInputError, OrchestratorError
@@ -48,7 +46,7 @@ def stage_wav(source: Path | str, data_dir: Path | str) -> Path:
             if wav_in.getnframes() == 0:
                 raise DoctorInputError("WAV-файл порожній")
     except (wave.Error, EOFError) as exc:
-        raise DoctorInputError("Некоректний WAV-файл") from exc
+        raise DoctorInputError("Не вдалося прочитати WAV. Експортуйте стереозапис у WAV PCM 16 або 24 біти. Формат float не підтримується.") from exc
     except OSError as exc:
         raise DoctorInputError("Не вдалося відкрити WAV-файл") from exc
 
@@ -66,6 +64,13 @@ def stage_wav(source: Path | str, data_dir: Path | str) -> Path:
         discard_staged(temp_path)
         raise DoctorInputError("Не вдалося зберегти WAV-файл") from exc
     return temp_path
+
+
+def clean_staged_imports(data_dir: Path) -> None:
+    """Remove incomplete imports only while holding the application's directory lock."""
+    for entry in (data_dir / "audio").glob(".staging-*.tmp"):
+        if entry.is_file():
+            discard_staged(entry)
 
 
 def discard_staged(staged: Path | None) -> None:
@@ -146,7 +151,10 @@ def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:
 
     try:
         with wave.open(str(path), "rb") as wav_in:
-            if wav_in.getsampwidth() != 2:
+            import numpy as np
+
+            width = wav_in.getsampwidth()
+            if width not in (1, 2, 3, 4):
                 return []
 
             total_frames = wav_in.getnframes()
@@ -163,12 +171,19 @@ def waveform_peaks(path: Path | str, bins: int = 900) -> list[float]:
                     continue
 
                 wav_in.setpos(start_frame)
-                samples = array("h")
-                samples.frombytes(wav_in.readframes(count))
-                if sys.byteorder != "little":
-                    samples.byteswap()
-                peak = max((abs(value) for value in samples), default=0)
-                peaks.append(round(min(peak / 32768.0, 1.0), 4))
+                data = wav_in.readframes(count)
+                if not data:
+                    return []
+                if width == 3:
+                    octets = np.frombuffer(data, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+                    # Move the sign bit to bit 31 before the arithmetic right shift.
+                    samples = ((octets[:, 2] << 24) | (octets[:, 1] << 16) | (octets[:, 0] << 8)) >> 8
+                elif width == 1:
+                    samples = np.frombuffer(data, dtype=np.uint8).astype(np.int16) - 128
+                else:
+                    samples = np.frombuffer(data, dtype=f"<i{width}")
+                peak = max(-int(samples.min()), int(samples.max()))
+                peaks.append(round(peak / (1 << (width * 8 - 1)), 4))
 
             return peaks
     except (wave.Error, EOFError, OSError, ValueError) as exc:

@@ -63,6 +63,18 @@ _GENERIC_ERROR = "Сталася помилка. Спробуйте ще раз"
 # Session languages the pipeline supports (S1 is Ukrainian-only).
 _LANGUAGES = ("uk",)
 
+_PROCESS_ERRORS = {
+    "missing_api_key": "Додайте API-ключ Gemini у Налаштуваннях і продовжте обробку.",
+    "key_rejected": "Gemini відхилив ключ або доступ до моделі. Перевірте ключ у Налаштуваннях.",
+    "rate_limit": "Досягнуто ліміту Gemini. Спробуйте пізніше.",
+    "provider_busy": "Gemini тимчасово недоступний. Продовжте обробку пізніше.",
+    "provider_request": "Gemini відхилив запит. Перевірте налаштування моделі.",
+    "provider_timeout": "Gemini не відповів вчасно. Спробуйте продовжити обробку.",
+    "network_unavailable": "Не вдалося з’єднатися з Gemini. Перевірте інтернет і продовжте обробку.",
+    "NoSpeechError": "У записі не розпізнано мовлення. Перевірте файл і виберіть потрібний запис.",
+}
+
+
 # Any callable; lets ``_guard`` return the same type it receives.
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -123,7 +135,9 @@ def _guard(method: F) -> F:
             raise CleanupPendingError(str(exc)) from exc
         except DoctorInputError as exc:
             raise FacadeError(str(exc)) from exc
-        except (StepFailedError, RepositoryError, OSError, LongitudinalError, LLMRequestError) as exc:
+        except StepFailedError as exc:
+            raise FacadeError(_PROCESS_ERRORS.get(exc.error_message, _GENERIC_ERROR)) from exc
+        except (RepositoryError, OSError, LongitudinalError, LLMRequestError) as exc:
             logger.warning("Facade %s: %s", method.__name__, type(exc).__name__)
             raise FacadeError(_GENERIC_ERROR) from exc
 
@@ -264,7 +278,7 @@ class ClarityScribeFacadeImpl(ClarityScribeFacade):
         state = self._o.get_processing_state(session_id)
         return {
             "stages": state["stages"],
-            "error": _GENERIC_ERROR if state["failed_step"] else None,
+            "error": _PROCESS_ERRORS.get(state["error"], _GENERIC_ERROR) if state["failed_step"] else None,
             "finished": state["finished"],
         }
 

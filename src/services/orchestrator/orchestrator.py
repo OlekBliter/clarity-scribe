@@ -72,6 +72,8 @@ from src.systems.audio_transcription.exceptions import AudioTranscriptionError
 from src.systems.biomarkers import AcousticBiomarkerError
 from src.systems.clinical_engine.exceptions import (
     ClinicalEngineError,
+    MissingApiKey,
+    ProviderFailure,
     LLMResponseError,
 )
 from src.systems.longitudinal import LongitudinalError
@@ -84,6 +86,8 @@ SYSTEM_ERRORS: tuple[type[Exception], ...] = (
     AudioTranscriptionError,
     AcousticBiomarkerError,
     ClinicalEngineError,
+    MissingApiKey,
+    ProviderFailure,
     LongitudinalError,
     NerError,
     ValidationError,
@@ -194,6 +198,7 @@ class Orchestrator:
         self._busy_sessions: set[str] = set()
         self._busy_lock = threading.Lock()
         self._pipeline_lock = threading.Lock()
+        self._processing_session: str | None = None
 
         self.patients_repo = PatientsRepo()
         self.sessions_repo = SessionsRepo()
@@ -265,6 +270,10 @@ class Orchestrator:
     @staticmethod
     def _error_text(exc: Exception) -> str:
         """Error text stored in the database; never includes pydantic input values."""
+        if isinstance(exc, ProviderFailure):
+            return exc.reason
+        if isinstance(exc, MissingApiKey):
+            return "missing_api_key"
         if isinstance(exc, ValidationError):
             return f"ValidationError: {exc.error_count()} error(s)"
         return type(exc).__name__
@@ -594,12 +603,14 @@ class Orchestrator:
             return self.patients_repo.create(conn, cleaned)
 
     @contextmanager
-    def _single_operation(self):
+    def _single_operation(self, processing_session=None):
         if not self._pipeline_lock.acquire(blocking=False):
             raise DoctorInputError("Триває обробка іншого запису.")
+        self._processing_session = processing_session
         try:
             yield
         finally:
+            self._processing_session = None
             self._pipeline_lock.release()
 
     def register_session(
@@ -668,6 +679,9 @@ class Orchestrator:
                     session_id = latest["session_id"]
                     # Refuses a restart while the session is being processed.
                     claims.enter_context(self._claim_session(session_id))
+                    card = self.cards_repo.find(conn, patient_id)
+                    if card and card["source_session_id"] == session_id and card["status"] == "approved":
+                        raise DoctorInputError("Медкартку підтверджено. Продовжте обробку зі збереженим записом.")
                     retry_path = self._audio_path(patient_id, session_id)
                     backup_path = self._move_aside(retry_path)
                     install_staged(staged, self.data_dir, patient_id, session_id)
@@ -744,7 +758,9 @@ class Orchestrator:
 
     def run_next(self, session_id: str) -> Step | None:
         """Execute a single pending pipeline step, if one exists."""
-        with self._single_operation(), self._claim_session(session_id):
+        with self._single_operation(session_id), self._claim_session(session_id):
+            with self.db.transaction() as conn:
+                self.sessions_repo.clear_failure(conn, session_id)
             current_step = self._get_next_step(session_id)
             if current_step is not None:
                 self._execute_step(session_id, current_step)
@@ -756,7 +772,9 @@ class Orchestrator:
         on_progress: Callable[[Step, str], None] | None = None,
     ) -> None:
         """Execute all pending steps, reporting 'running' and 'done' events."""
-        with self._single_operation(), self._claim_session(session_id):
+        with self._single_operation(session_id), self._claim_session(session_id):
+            with self.db.transaction() as conn:
+                self.sessions_repo.clear_failure(conn, session_id)
             for _ in range(len(Step) + 1):  # one spare iteration for the final None check
                 current_step = self._get_next_step(session_id)
                 if current_step is None:
@@ -794,6 +812,7 @@ class Orchestrator:
                 failed_step,
                 card["status"] if card else None,
                 note["status"] if note else None,
+                running=self._processing_session == session_id,
             ),
             "error": session.get("error") if failed_step else None,
             "failed_step": failed_step,

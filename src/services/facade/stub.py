@@ -440,6 +440,8 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             if restart and replace_id is None:
                 raise FacadeError("Спершу продовжте або видаліть незавершену сесію.")
             if restart:  # the doctor repeats the same actions: restart the session from scratch
+                if restart["number"] == 1 and self._cards.get(patient_id, {}).get("status") == "approved":
+                    raise FacadeError("Медкартку підтверджено. Продовжте обробку зі збереженим записом.")
                 restart.update({"date": day, "status": "uploaded", "failed_step": None, "soap": None,
                                 "language": language})
                 self._progress.pop(restart["session_id"], None)

@@ -12,6 +12,7 @@ from PySide6.QtGui import QHideEvent
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from src.app.ui import strings as S
+from src.app.ui.errors import error_message
 from src.app.ui.export_pdf import ask_save_path, export_soap
 from src.app.ui.qt_helpers import set_variant
 from src.app.ui.router import Router
@@ -123,7 +124,7 @@ class SessionScreen(BaseScreen):
         """Navigate back on SOAP failure; allow partial auxiliary-data failures."""
         if not self._active or generation != self._generation:
             return
-        message = str(error) or S.ERROR_GENERIC
+        message = error_message(error)
         self._errors[key] = message
         self._pending.discard(key)
         if key == "soap":
@@ -242,7 +243,7 @@ class SessionScreen(BaseScreen):
                   on_error=partial(complete, failure or self._action_error))
 
     def _action_error(self, error: BaseException) -> None:
-        self._toast(str(error) or S.ERROR_GENERIC)
+        self._toast(error_message(error))
 
     def _valid_edits(self, edits) -> bool:
         for edit in edits:
@@ -369,10 +370,10 @@ class SessionScreen(BaseScreen):
             return
         try:
             export_soap(data, path)
-        except OSError as exc:
-            self._toast(S.PDF_WRITE_ERROR.format(error=str(exc)))
-        except Exception as exc:
-            self._toast(S.PDF_EXPORT_ERROR.format(error=str(exc)))
+        except OSError:
+            self._toast(S.PDF_WRITE_ERROR)
+        except Exception:
+            self._toast(S.PDF_EXPORT_ERROR)
         else:
             self._toast(S.SESSION_SAVED)
 

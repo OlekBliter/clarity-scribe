@@ -12,3 +12,7 @@ class UnsupportedLanguageError(AudioTranscriptionError):
 
 class ModelNotFoundError(AudioTranscriptionError):
     """Raised when the configured Vosk model cannot be found or loaded."""
+
+
+class NoSpeechError(AudioTranscriptionError):
+    """Neither channel contained recognizable speech."""

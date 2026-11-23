@@ -98,10 +98,10 @@ def save_screen_pdf(parent, data, filename, exporter):
         return
     try:
         exporter(data, path)
-    except OSError as exc:
-        message = S.PDF_WRITE_ERROR.format(error=exc)
-    except Exception as exc:
-        message = S.PDF_EXPORT_ERROR.format(error=exc)
+    except OSError:
+        message = S.PDF_WRITE_ERROR
+    except Exception:
+        message = S.PDF_EXPORT_ERROR
     else:
         message = S.SESSION_SAVED
     parent.window().toast.show_message(message)

@@ -350,7 +350,7 @@ class MedicalCardScreen(BaseScreen):
                            session_id=first["session_id"], source_segment_id=source["segment_id"])
 
         self.call(self.facade.get_patient_profile, patient_id, on_success=open_session,
-                  on_error=lambda exc: self.window().toast.show_message(str(exc)))
+                  on_error=self._default_error)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

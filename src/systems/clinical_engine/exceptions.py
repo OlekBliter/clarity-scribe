@@ -12,3 +12,15 @@ class LLMRequestError(ClinicalEngineError):
 
 class LLMResponseError(ClinicalEngineError):
     """Raised when an LLM response cannot be parsed or validated."""
+
+
+class MissingApiKey(ConfigurationError):
+    """Generation requires a configured provider key."""
+
+
+class ProviderFailure(LLMRequestError):
+    """Safe reason code for persistence and presentation."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason

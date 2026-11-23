@@ -313,7 +313,11 @@ class AddSessionScreen(BaseScreen):
 
     def _on_file_selected(self, path: str) -> None:
         channels = audio_meta.wav_channels(path)
-        if channels is not None and channels != 2:
+        if channels is None:
+            self._drop.clear()
+            show_error(self, strings.ADD_WAV_FORMAT)
+            return
+        if channels != 2:
             # Реальний фасад прийме лише двоканальний запис (лікар/пацієнт): кажемо одразу
             self._drop.clear()
             show_error(self, strings.ADD_NOT_STEREO)
@@ -344,7 +348,9 @@ class AddSessionScreen(BaseScreen):
         self._set_form_enabled(False)
         if self._replacing and not confirm_destructive(self, strings.ADD_REPEAT,
                                                        strings.ADD_REPLACE_WARNING, strings.ADD_REPEAT):
-            self._set_form_enabled(True)
+            self._replacing = False
+            self._show_progress_mode(resumed=True)
+            self._refresh_state()
             return
         self._registering = True
         self._notify_activity()
