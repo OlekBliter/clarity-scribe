@@ -1,0 +1,7 @@
+# Усі залежності проєкту (розбиті за підсистемами у requirements/*.txt)
+-r requirements/base.txt
+-r requirements/app.txt
+-r requirements/audio.txt
+-r requirements/biomarkers.txt
+-r requirements/ner.txt
+-r requirements/llm.txt

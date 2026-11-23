@@ -35,7 +35,7 @@ from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea,
                                QVBoxLayout, QWidget)
 
-from src.app.ui import metrics, strings
+from src.app.ui import audio_meta, metrics, strings
 from src.app.ui.errors import show_error
 from src.app.ui.router import Route
 from src.app.ui.screens.base import BaseScreen
@@ -291,7 +291,13 @@ class AddSessionScreen(BaseScreen):
         for widget in (self._hint, self._leave, self._repeat, self._continue, self._to_profile):
             widget.hide()
 
-    def _on_file_selected(self, _path: str) -> None:
+    def _on_file_selected(self, path: str) -> None:
+        channels = audio_meta.wav_channels(path)
+        if channels is not None and channels != 2:
+            # Реальний фасад прийме лише двоканальний запис (лікар/пацієнт): кажемо одразу
+            self._drop.clear()
+            show_error(self, strings.ADD_NOT_STEREO)
+            return
         self._update_meta()
         self._update_start()
 

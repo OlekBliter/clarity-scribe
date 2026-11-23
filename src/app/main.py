@@ -24,7 +24,14 @@ def make_facade(use_stub: bool):
         from src.services.facade import ClarityScribeFacadeStub
         return ClarityScribeFacadeStub(step_delay=0.6)
     from src.services.facade import create_facade
-    return create_facade(False)
+    try:
+        return create_facade(False)
+    except Exception as exc:  # noqa: BLE001 (немає залежності/моделі/.env: показуємо причину)
+        logging.getLogger(__name__).exception("Не вдалося створити реальний фасад")
+        raise SystemExit(
+            f"Не вдалося запустити реальний фасад: {exc}\n"
+            "Перевірте .env, моделі та залежності (requirements.txt); "
+            "для розробки UI запустіть з --stub.") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
