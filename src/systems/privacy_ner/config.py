@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
+from src.systems.model_paths import model_path
 from .models import EntityType
 
 # Zero-shot labels sent to GLiNER and the entity type each one means.
@@ -208,7 +209,7 @@ DEFAULT_GLINER_DIR = os.path.join("models", "gliner_multi-v2.1")
 
 def _model_dir_from_env() -> str:
     load_dotenv()  # reads .env if present; real environment variables take precedence
-    return os.environ.get("GLINER_MODEL_DIR") or DEFAULT_GLINER_DIR
+    return str(model_path(os.environ.get("GLINER_MODEL_DIR") or DEFAULT_GLINER_DIR))
 
 
 @dataclass(frozen=True)

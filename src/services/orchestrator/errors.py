@@ -19,6 +19,10 @@ class DoctorInputError(OrchestratorError):
         self.user_message = user_message
 
 
+class AudioCleanupPending(DoctorInputError):
+    """Database deletion committed, filesystem cleanup will be retried."""
+
+
 class InvalidTransitionError(DoctorInputError):
     """The action is impossible in the current state (e.g. editing an approved note)."""
 

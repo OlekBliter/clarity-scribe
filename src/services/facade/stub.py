@@ -119,6 +119,11 @@ _SOAP_SEED = {
         ("Розглянути щоденний самоконтроль настрою та сну", "recommended"),
     ),
 }
+_LLM_PROVIDERS = frozenset({"gemini"})
+_LANGUAGES = ("uk",)
+# Fake paths shown on the Settings screen (the stub has no data directory).
+_STUB_DB_PATH = "C:/Users/demo/AppData/Roaming/clarityscribe/clarityscribe.db"
+_STUB_AUDIO_DIR = "C:/Users/demo/AppData/Roaming/clarityscribe/audio"
 _SOAP_PATH_RE = re.compile(r"^(?:(subjective|objective|assessment)\.text|plan\[(\d+)\]\.text)$")
 
 
@@ -191,8 +196,15 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         self._patients: dict[str, dict[str, Any]] = {}
         self._sessions: dict[str, dict[str, Any]] = {}
         self._cards: dict[str, dict[str, Any]] = {}
+        self._running_id: str | None = None
         self._active: set[str] = set()
         self._progress: dict[str, dict[str, Any]] = {}
+        self._settings: dict[str, Any] = {
+            "channels_swapped": False,
+            "language": "uk",
+            "llm_provider": "gemini",
+            "has_api_key": False,
+        }
         self._seed()
 
     # ------------------------------------------------------------------ seeding
@@ -354,7 +366,10 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
     def delete_patient(self, patient_id: str) -> None:
         with self._lock:
             self._patient(patient_id)
-            for session_id in [s["session_id"] for s in self._patient_sessions(patient_id)]:
+            sessions = self._patient_sessions(patient_id)
+            if any(s["session_id"] == self._running_id for s in sessions):
+                raise FacadeError("Триває обробка запису пацієнта.")
+            for session_id in [s["session_id"] for s in sessions]:
                 self._sessions.pop(session_id, None)
                 self._active.discard(session_id)
                 self._progress.pop(session_id, None)
@@ -401,6 +416,12 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             return sessions[-1]["number"] + 1 if sessions else 1
 
     def add_session(self, patient_id: str, wav_path: str, language: str, session_date: str) -> str:
+        return self._register(patient_id, wav_path, language, session_date, None)
+
+    def replace_session(self, patient_id, session_id, wav_path, language, session_date):
+        return self._register(patient_id, wav_path, language, session_date, session_id)
+
+    def _register(self, patient_id, wav_path, language, session_date, replace_id):
         if Path(wav_path).suffix.lower() != ".wav":
             raise FacadeError("Потрібен двоканальний .wav")
         if language != "uk":
@@ -412,7 +433,15 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         with self._lock:
             self._patient(patient_id)
             restart = self._restartable(patient_id)
+            if self._running_id:
+                raise FacadeError("Триває обробка іншого запису.")
+            if replace_id is not None and (not restart or replace_id != restart["session_id"]):
+                raise FacadeError("Цю сесію вже не можна замінити.")
+            if restart and replace_id is None:
+                raise FacadeError("Спершу продовжте або видаліть незавершену сесію.")
             if restart:  # the doctor repeats the same actions: restart the session from scratch
+                if restart["number"] == 1 and self._cards.get(patient_id, {}).get("status") == "approved":
+                    raise FacadeError("Медкартку підтверджено. Продовжте обробку зі збереженим записом.")
                 restart.update({"date": day, "status": "uploaded", "failed_step": None, "soap": None,
                                 "language": language})
                 self._progress.pop(restart["session_id"], None)
@@ -428,13 +457,20 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             session = self._session(session_id)
             if session["status"] != "uploaded":
                 raise FacadeError("Сесію вже оброблено")
+            if self._running_id:
+                raise FacadeError("Триває обробка іншого запису.")
+            self._running_id = session_id
             self._active.add(session_id)
-            self._progress[session_id] = {"done": set(), "running": None, "error": None}
+            progress = self._progress.setdefault(session_id, {"done": set(), "running": None, "error": None})
+            completed = progress.setdefault("completed_steps", set())
+            progress["error"] = None
         try:
             for step in PROCESSING_STEPS:
                 if step.startswith("s3") and session["number"] != 1:
                     continue
-                self._run_step(session_id, step, on_progress)
+                if step not in completed:
+                    self._run_step(session_id, step, on_progress)
+                    completed.add(step)
             with self._lock:
                 session["status"] = "drafted"
                 session["soap"] = self._new_soap(approved=False)
@@ -442,6 +478,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                     self._cards[session["patient_id"]] = self._new_card(session["patient_id"], approved=False)
         finally:
             with self._lock:
+                self._running_id = None
                 self._active.discard(session_id)
 
     def _run_step(self, session_id: str, step: str, on_progress: ProgressCallback | None) -> None:
@@ -517,7 +554,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             approved = soap["status"] == "approved"
             return {
                 "session_id": session_id, "patient_id": session["patient_id"],
-                "patient_name": self._patients[session["patient_id"]]["preferred_name"],
+                "patient_name": self._patients[session["patient_id"]]["preferred_name"] or "Без імені",
                 "number": session["number"], "date": _fmt_date(session["date"]),
                 "status": soap["status"], "badge": "approved" if approved else "review",
                 "editable": not approved,
@@ -529,15 +566,26 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
             }
 
     def _apply_soap_edits(self, soap: dict[str, Any], edits: list[dict[str, Any]]) -> None:
+        source_ids = None
         parsed = []
         for edit in edits:
             match = _SOAP_PATH_RE.match(str(edit.get("path", "")))
             value = edit.get("new_value")
-            if not match or not isinstance(value, str):
+            if edit.get("path") == "subjective.source_segments":
+                original = soap["subjective"]["source_segments"]
+                if (not isinstance(value, list)
+                        or any(type(i) is not int or i not in original for i in value)
+                        or len(set(value)) != len(value)):
+                    raise FacadeError("Некоректні джерела SOAP")
+                source_ids = list(value)
+                continue
+            if not match or not isinstance(value, str) or not value.strip():
                 raise FacadeError("Не вдалося зберегти правки")
             if match.group(2) is not None and int(match.group(2)) >= len(soap["plan"]):
                 raise FacadeError("Не вдалося зберегти правки")
             parsed.append((match, value))
+        if source_ids is not None:
+            soap["subjective"]["source_segments"] = source_ids
         for match, value in parsed:  # apply only after everything is valid
             if match.group(1):
                 soap[match.group(1)]["text"] = value
@@ -592,6 +640,8 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
     def delete_session(self, session_id: str) -> None:
         with self._lock:
             session = self._session(session_id)
+            if self._running_id == session_id:
+                raise FacadeError("Триває обробка запису.")
             siblings = self._patient_sessions(session["patient_id"])
             if session["number"] == 1 and len(siblings) > 1:
                 raise FacadeError("Сесію №1 не можна видалити, поки є інші сесії")
@@ -624,7 +674,7 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                 for field_id, data in card["fields"].items()
             ]
             return {
-                "patient_id": patient_id, "patient_name": patient["preferred_name"],
+                "patient_id": patient_id, "patient_name": patient["preferred_name"] or "Без імені",
                 "date": _fmt_date(first["date"]), "status": card["status"],
                 "badge": "approved" if approved else "review", "editable": not approved,
                 "contacts": {
@@ -652,24 +702,58 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
                 valid = value is None or isinstance(value, str)
             if not valid:
                 raise FacadeError("Не вдалося зберегти правки")
+            if field_id == "hypotheses.risk" and value not in ("low", "moderate", "high"):
+                raise FacadeError("Некоректна оцінка ризику")
+            if field_id not in BOOL_FIELDS and (value is None or not value.strip()):
+                value = "-"
             checked.append((field_id, value))
         for field_id, value in checked:
-            card["fields"][field_id]["value"] = value
+            field = card["fields"][field_id]
+            if field["state"] != "attention":
+                field["state"] = "normal"
+            field["contradiction_text"] = None
+            field["value"] = value
             card["edited"].add(field_id)
 
-    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
-        with self._lock:
-            card = self._card(patient_id)
-            if card["status"] == "approved":
-                raise FacadeError("Підтверджені дані змінювати не можна")
-            self._apply_card_edits(card, edits)
+    def _apply_card_review(self, patient_id, card, edits, contacts, evidence):
+        # Validate related updates before changing any part of the draft.
+        for key, value in contacts.items():
+            if key not in _CONTACT_KEYS:
+                raise FacadeError("Невідоме контактне поле")
+            if not key.startswith("emergency_") and (not isinstance(value, str) or not value.strip()):
+                raise FacadeError("Основне контактне поле не можна залишити порожнім.")
+            if key == "emergency_consent":
+                valid = isinstance(value, bool)
+            else:
+                valid = value is None or isinstance(value, str)
+            if not valid:
+                raise FacadeError("Некоректне значення контакту")
+        for key, ids in evidence.items():
+            if (key not in card["fields"] or not isinstance(ids, list)
+                    or any(type(i) is not int or i not in card["fields"][key]["evidence"] for i in ids)
+                    or len(ids) != len(set(ids))):
+                raise FacadeError("Некоректні джерела медкартки")
+        self._apply_card_edits(card, edits)
+        self._patients[patient_id].update(contacts)
+        for key, ids in evidence.items():
+            card["fields"][key]["evidence"] = list(ids)
+            card["edited"].add(key)
 
-    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime) -> None:
+    def save_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime,
+                  *, contacts=None, evidence=None) -> None:
         with self._lock:
             card = self._card(patient_id)
             if card["status"] == "approved":
                 raise FacadeError("Підтверджені дані змінювати не можна")
-            self._apply_card_edits(card, edits)
+            self._apply_card_review(patient_id, card, edits, contacts or {}, evidence or {})
+
+    def approve_card(self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime,
+                  *, contacts=None, evidence=None) -> None:
+        with self._lock:
+            card = self._card(patient_id)
+            if card["status"] == "approved":
+                raise FacadeError("Підтверджені дані змінювати не можна")
+            self._apply_card_review(patient_id, card, edits, contacts or {}, evidence or {})
             card["status"] = "approved"
             first = self._patient_sessions(patient_id)[0]
             self._maybe_approve_session(first)
@@ -708,3 +792,65 @@ class ClarityScribeFacadeStub(ClarityScribeFacade):
         phrases = {"up": "зростає", "down": "зменшується", "stable": "стабільна"}
         parts = [f"{_METRIC_TITLES.get(t['metric'], t['metric'])} — {phrases[t['direction']]}" for t in trends]
         return "Порівняно з першим візитом: " + "; ".join(parts) + "."
+
+    # ----------------------------------------------------------------- llm`s connection
+
+    def test_llm_connection(self, provider: str, api_key: str) -> dict[str, Any]:
+        """Pretend to check the LLM key. Makes no network requests.
+
+        An empty key gives "Введіть API-ключ", a key starting with ``"bad"``
+        gives "Невірний API-ключ", any other key succeeds after about 0.5 s.
+
+        Returns:
+            ``{"ok": bool, "message": str, "latency_ms": int | None}``
+        """
+        if (provider or "").strip().lower() not in _LLM_PROVIDERS:
+            return {"ok": False, "message": "Невідомий провайдер LLM", "latency_ms": None}
+        key = (api_key or "").strip()
+        with self._lock:
+            has_saved_key = self._settings["has_api_key"]
+        if not key and not has_saved_key:
+            return {"ok": False, "message": "Введіть API-ключ", "latency_ms": None}
+        if key.startswith("bad"):
+            return {"ok": False, "message": "Невірний API-ключ", "latency_ms": None}
+        started = time.perf_counter()
+        time.sleep(0.5)
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        return {"ok": True, "message": "З'єднання встановлено", "latency_ms": latency_ms}
+
+    # ----------------------------------------------------------------- settings
+
+    def get_settings(self) -> dict[str, Any]:
+        """Return a copy of the in-memory settings plus fake paths.
+
+        The key itself is never stored by the stub, only ``has_api_key``.
+        """
+        with self._lock:
+            settings = dict(self._settings)
+        settings.update(
+            db_path=_STUB_DB_PATH,
+            audio_dir=_STUB_AUDIO_DIR,
+            providers=sorted(_LLM_PROVIDERS),
+            languages=list(_LANGUAGES),
+        )
+        return settings
+
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Update the in-memory settings; nothing is written to disk.
+
+        A non-empty ``api_key`` sets ``has_api_key``; ``None`` or an empty
+        string keeps the current value. Invalid values change nothing.
+        """
+        if llm_provider not in _LLM_PROVIDERS:
+            raise FacadeError("Непідтримуваний провайдер")
+        if language not in _LANGUAGES:
+            raise FacadeError("Непідтримувана мова")
+        with self._lock:
+            self._settings["channels_swapped"] = bool(channels_swapped)
+            self._settings["language"] = language
+            self._settings["llm_provider"] = llm_provider
+            if (api_key or "").strip():
+                self._settings["has_api_key"] = True

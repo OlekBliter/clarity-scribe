@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pydub import AudioSegment
 from .audio_normalization import normalize_audio
-from pathlib import Path
+from src.systems.model_paths import model_path as resolve_model_path
 from vosk import Model, KaldiRecognizer
 import json
 from dotenv import load_dotenv
@@ -43,7 +43,7 @@ def load_model(model_path: str | None = None) -> Model:
             "VOSK_MODEL_DIR is not set; define it in .env or the environment."
         )
 
-    path = Path(model_path)
+    path = resolve_model_path(model_path)
 
     if not path.is_dir():
         raise ModelNotFoundError(f"Vosk model directory not found: '{path}'.")

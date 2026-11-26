@@ -66,6 +66,10 @@ class FacadeError(Exception):
         self.user_message = user_message
 
 
+class CleanupPendingError(FacadeError):
+    """The record is deleted, but audio removal is still pending."""
+
+
 class ClarityScribeFacade(ABC):
     """Abstract facade. See the docstring of each method for the response shape."""
 
@@ -119,7 +123,7 @@ class ClarityScribeFacade(ABC):
         """Return the number to show in the read-only "Номер сесії" field.
 
         It is the number of the last session if that session has not reached
-        ``drafted`` yet (it will be restarted), otherwise ``max + 1``; 1 for a new patient.
+        ``drafted`` yet (it must be completed or removed first), otherwise ``max + 1``; 1 for a new patient.
         """
 
     @abstractmethod
@@ -137,6 +141,11 @@ class ClarityScribeFacade(ABC):
         Raises:
             FacadeError: Not a two-channel ``.wav``, unreadable file, unknown patient.
         """
+
+    @abstractmethod
+    def replace_session(self, patient_id: str, session_id: str, wav_path: str, language: str,
+                        session_date: str) -> str:
+        """Replace the explicitly selected unfinished recording after confirmation."""
 
     @abstractmethod
     def process_session(
@@ -186,8 +195,10 @@ class ClarityScribeFacade(ABC):
         """Save doctor edits (status stays ``draft``).
 
         Args:
-            edits: ``[{"path": "subjective.text" | "objective.text" | "assessment.text"
-                       | "plan[<i>].text", "new_value": str}]``
+            edits: ``[{"path": "subjective.text" | "subjective.source_segments"
+                       | "objective.text" | "assessment.text" | "plan[<i>].text",
+                       "new_value": ...}]``. ``subjective.source_segments`` accepts
+                       a list of currently attached segment IDs; ``[]`` removes all sources.
             review_started_at: When the doctor opened the screen.
 
         Raises:
@@ -255,15 +266,35 @@ class ClarityScribeFacade(ABC):
 
     @abstractmethod
     def save_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[int]] | None = None,
     ) -> None:
-        """Save doctor edits of the card. ``edits`` = ``[{"path": field_id, "new_value": ...}]``."""
+        """Save card field, contact, and source edits without approving.
+
+        ``contacts`` contains changed patient contact fields. ``evidence`` maps
+        card field IDs to the currently attached segment IDs to keep; ``[]``
+        removes all source links for that field.
+        """
 
     @abstractmethod
     def approve_card(
-        self, patient_id: str, edits: list[dict[str, Any]], review_started_at: datetime
+        self,
+        patient_id: str,
+        edits: list[dict[str, Any]],
+        review_started_at: datetime,
+        *,
+        contacts: dict[str, Any] | None = None,
+        evidence: dict[str, list[int]] | None = None,
     ) -> None:
-        """Apply edits (if any) and approve the card."""
+        """Apply card field, contact, and source edits and approve the card.
+
+        ``contacts`` and ``evidence`` use the same format as ``save_card``.
+        """
 
     # ----------------------------------------------------------------- dynamics
 
@@ -279,4 +310,78 @@ class ClarityScribeFacade(ABC):
                            "slope": float | None,       # per session
                            "direction": "up" | "down" | "stable"}],
                "summary_text": str}``
+        """
+
+    # ----------------------------------------------------------------- llm`s connection
+
+    @abstractmethod
+    def test_llm_connection(self, provider: str, api_key: str) -> dict[str, Any]:
+        """Check that the LLM provider accepts the key. Sends no patient data.
+
+        Synchronous, timeout about 10 s (the UI calls it from a background
+        thread). Saves nothing; the key is never logged or returned.
+
+        Args:
+            provider: Provider id: ``"gemini"`` (case-insensitive).
+            api_key: Key from the settings form. If empty, the saved key is
+                checked; without a saved key the result is ``ok=False``.
+
+        Returns:
+            ``{"ok": True, "message": "З'єднання встановлено", "latency_ms": 420}``
+            ``{"ok": False, "message": "Невірний API-ключ", "latency_ms": None}``
+            Expected failures (wrong key, no internet, rate limit, timeout) are
+            ``ok=False`` with a Ukrainian message, not exceptions.
+
+        Raises:
+            FacadeError: Unexpected failure ("Сталася помилка. Спробуйте ще раз").
+        """
+
+    # ----------------------------------------------------------------- settings
+
+    @abstractmethod
+    def get_settings(self) -> dict[str, Any]:
+        """Return the current application settings for the Settings screen.
+
+        The API key itself is never returned, only whether one is saved.
+        ``db_path`` and ``audio_dir`` are read-only (shown, not edited).
+
+        Returns:
+            ``{"channels_swapped": bool,     # False: channel 0 = doctor, 1 = patient
+               "language": "uk",
+               "llm_provider": "gemini",
+               "has_api_key": bool,
+               "db_path": str,
+               "audio_dir": str,
+               "providers": ["gemini"],      # allowed llm_provider values
+               "languages": ["uk"]}``        # allowed language values
+
+            Example::
+
+                {"channels_swapped": False, "language": "uk",
+                 "llm_provider": "gemini", "has_api_key": True,
+                 "db_path": "C:/Users/.../clarityscribe/clarityscribe.db",
+                 "audio_dir": "C:/Users/.../clarityscribe/audio",
+                 "providers": ["gemini"], "languages": ["uk"]}
+        """
+
+    @abstractmethod
+    def save_settings(self, channels_swapped: bool,
+                      language: str,
+                      llm_provider: str,
+                      api_key: str | None = None) -> None:
+        """Save the settings from the Settings screen.
+
+        Nothing is saved if any value is invalid. The key is never logged.
+
+        Args:
+            channels_swapped: ``True`` if channel 0 is the patient and
+                channel 1 the doctor.
+            language: Session language, one of ``get_settings()["languages"]``.
+            llm_provider: Provider id, one of ``get_settings()["providers"]``.
+            api_key: New API key. ``None`` or an empty string keeps the
+                saved key unchanged.
+
+        Raises:
+            FacadeError: "Непідтримуваний провайдер", "Непідтримувана мова",
+                or "Сталася помилка. Спробуйте ще раз" if saving fails.
         """

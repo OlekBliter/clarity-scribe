@@ -120,6 +120,7 @@ def stage_states(
     failed_step: str | None,
     card_status: str | None,
     soap_status: str | None,
+    *, running: bool = False,
 ) -> list[dict[str, str]]:
     """State of each of the five processing stages.
 
@@ -150,7 +151,7 @@ def stage_states(
             if states[key] != "not_needed":
                 states[key] = "pending"
         states[failed_stage] = "error"
-    elif not failed_step:
+    elif running:
         for key in STAGE_KEYS:
             if states[key] == "pending":
                 states[key] = "running"

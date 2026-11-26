@@ -1,93 +1,59 @@
 # ClarityScribe
 
-ClarityScribe is a local desktop application for analyzing therapy-session
-audio, extracting speech biomarkers, anonymizing transcript data, and
-generating clinical documents with Google Gemini. Audio, models, and the
-database stay on the local machine; only configured LLM requests leave it.
+ClarityScribe is a desktop app that helps clinicians turn Ukrainian-language therapy recordings into clinical notes. Import a stereo recording, review the transcript alongside the audio, and check the generated drafts against what was said before approving them.
 
-## Local setup
+## From recording to reviewed notes
 
-The commands below are run from the repository root.
+1. **Add a session.** Open a patient profile and import a stereo PCM WAV with one speaker per channel. By default, channel 0 is the clinician and channel 1 is the patient. If your recorder uses the opposite order, swap the channels in Settings before importing. Use 16- or 24-bit PCM when exporting from an audio editor.
+2. **Review the drafts.** The first session produces an intake medical card and a SOAP note. Subsequent sessions produce a SOAP note. Open a source timestamp to inspect the transcript evidence, edit the draft, and save your changes. Approving a document makes it read-only.
+3. **Track changes across visits.** After two approved sessions, open the dynamics screen to compare speech measures such as pause ratio and speech rate. The overview shows up to ten recent sessions. Select a chart to see its full history.
+4. **Export a report.** The session, medical card, and dynamics screens each offer a PDF export.
 
-### 1. Create and activate a virtual environment
+The app processes one recording at a time. You can browse other patients while it runs and return through the progress banner. If generation is interrupted, choose **Continue processing** to resume from the saved recording. **Replace recording** starts over and discards the session’s drafts and saved edits.
 
-Windows PowerShell:
+## Where patient data goes
+
+Audio, original transcripts, patient contacts, and reviewed documents are stored on the local computer. Transcription with Vosk, detection of identifying text with GLiNER, and speech measurements also run locally.
+
+Document generation requires an internet connection to Google Gemini. Before generation, ClarityScribe replaces detected identifiers in the transcript with placeholders. The generation requests use this processed text and, for the SOAP note, speech measurements. The audio file and the local mapping used to restore identifiers stay on the computer.
+
+## Try the demo
+
+The demo opens with sample patients and sessions. It runs without model downloads or a Gemini key. Changes are kept in memory until you close the app.
+
+From the repository root, run these commands in Windows PowerShell with Python 3.12 installed.
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements\base.txt -r requirements\app.txt
+.\.venv\Scripts\python.exe -m src.app.main --stub
 ```
 
-If PowerShell blocks activation, run:
+## Use your own recordings
+
+**Install the processing dependencies.** After creating the environment above, run the following from the same directory.
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements\audio.txt -r requirements\biomarkers.txt -r requirements\llm.txt -r requirements\ner.txt
 ```
 
-### 2. Install dependencies
+**Install the local models.** Download the Ukrainian Vosk model and GLiNER weights, including the GLiNER backbone. The model guide lists the expected folder structure and the optional punctuation model. [Model setup](models/README.md)
 
-Install the requirements files in this order:
+**Configure the app.** On first setup, copy the environment template and edit the resulting `.env` file.
 
 ```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements\base.txt
-python -m pip install -r requirements\audio.txt
-python -m pip install -r requirements\biomarkers.txt
-python -m pip install -r requirements\llm.txt
-python -m pip install -r requirements\ner.txt
-python -m pip install -r requirements\app.txt
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-### 3. Download local models
+| Setting | Purpose |
+| --- | --- |
+| `VOSK_MODEL_DIR` | Ukrainian speech recognition model, typically `models/vosk-model-small-uk-v3-small`. |
+| `GLINER_MODEL_DIR` | Identifier detection model, typically `models/gliner_multi-v2.1`, with its local `backbone/`. |
+| `CLARITYSCRIBE_DATA_DIR` | Optional location for `clarityscribe.db` and the `audio/` directory. The Windows default is `%APPDATA%\clarityscribe`. |
+| `GEMINI_API_KEY` | Key for generating clinical drafts. You can also enter it in the app’s Settings and test the connection there. |
 
-Model weights are intentionally not stored in Git. Download and place them
-under `models\` as described in [models/README.md](models/README.md):
-
-- Vosk Ukrainian model in `models\vosk-model-small-uk-v3-small\`;
-- GLiNER model and its local `backbone\` in `models\gliner_multi-v2.1\`;
-- optional punctuation model if punctuation restoration is enabled.
-
-Keep the model directory structure intact. Do not commit weights or generated
-model files.
-
-### 4. Configure environment variables
-
-Create a local `.env` from the template:
+**Launch the app** with the local database.
 
 ```powershell
-Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m src.app.main
 ```
-
-Edit `.env` and set:
-
-| Variable | Purpose |
-|---|---|
-| `CLARITYSCRIBE_DATA_DIR` | Root for `clarityscribe.db` and `audio\`; empty uses the platform default, such as `%APPDATA%\clarityscribe` on Windows. |
-| `GEMINI_API_KEY` | Google Gemini API key for S3/S4. |
-| `VOSK_MODEL_DIR` | Relative or absolute path to the Vosk model. |
-| `GLINER_MODEL_DIR` | Relative or absolute path to the GLiNER model and `backbone\`. |
-
-Never commit `.env` or paste the API key into tracked files.
-
-### 5. Run from the repository root
-
-Always start Python with the repository root as the working directory so
-relative model paths and package imports resolve correctly:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -c "import src; print('ClarityScribe environment is ready')"
-```
-
-The application entrypoint is under active development in `src/app/`. When the
-desktop entrypoint is available, launch it from this same repository root with
-the project's documented `python -m ...` command.
-
-## Repository rules
-
-- Keep secrets in local `.env` files only.
-- Keep model weights outside Git; only model documentation and third-party
-  license files belong in `models\`.
-- Keep runtime databases, WAL/SHM files, audio recordings, caches, and build
-  artifacts outside Git.

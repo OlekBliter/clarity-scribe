@@ -5,7 +5,6 @@ from .exceptions import (
     ModelError,
     NerError,
 )
-from .ner_service import PrivacyNerService
 
 __all__ = [
     "NerConfig",
@@ -15,3 +14,10 @@ __all__ = [
     "ModelError",
     "PrivacyNerService",
 ]
+
+
+def __getattr__(name):
+    if name == "PrivacyNerService":
+        from .ner_service import PrivacyNerService
+        return PrivacyNerService
+    raise AttributeError(name)

@@ -37,13 +37,34 @@ RISK_VALUES = frozenset({"low", "moderate", "high"})
 def apply_soap_edits(final: S4Out | dict[str, Any], edits: Iterable[Edit]) -> S4Out:
     """Return a new S4Out with edits applied. The input is not modified.
 
-    Supported paths: ``subjective.text``, ``objective.text``,
-    ``assessment.text`` and ``plan[i].text``.
+    Supported paths: ``subjective.text``, ``subjective.source_segments``,
+    ``objective.text``, ``assessment.text`` and ``plan[i].text``.
     """
     data = final.model_dump(mode="python") if isinstance(final, S4Out) else deepcopy(final)
 
     for edit in edits:
         path, value = edit.path, edit.new_value
+
+        if path == "subjective.source_segments":
+            subjective = data.get("subjective")
+            source_segments = (
+                subjective.get("source_segments")
+                if isinstance(subjective, dict)
+                else None
+            )
+            if (
+                not isinstance(value, list)
+                or not isinstance(source_segments, list)
+                or any(
+                    type(segment_id) is not int or segment_id not in source_segments
+                    for segment_id in value
+                )
+                or len(set(value)) != len(value)
+            ):
+                raise DoctorInputError(SAVE_FAILED)
+            subjective["source_segments"] = value
+            continue
+
         if not isinstance(value, str) or not value.strip():
             raise DoctorInputError(SAVE_FAILED)
 
@@ -101,17 +122,20 @@ def apply_card_edits(data: dict[str, Any] | MedicalCardData, edits: Iterable[Edi
         if path in BOOL_FIELDS:
             if type(value) is not bool:
                 raise DoctorInputError(SAVE_FAILED)
-        elif not isinstance(value, str):
+        elif value is not None and not isinstance(value, str):
             raise DoctorInputError(SAVE_FAILED)
         elif path == "hypotheses.risk" and value not in RISK_VALUES:
             raise DoctorInputError(SAVE_FAILED)
+
+        if path not in BOOL_FIELDS and path != "hypotheses.risk" and (value is None or not value.strip()):
+            value = "-"
 
         field = fields.get(path)
         if field is not None:
             field.value = value
             field.edited_by_doctor = True
             # A doctor-provided value resolves "not discussed" / "contradictory".
-            if field.status in ("not_discussed", "contradictory") and value != "":
+            if field.status in ("not_discussed", "contradictory") and value not in (None, ""):
                 field.status = "filled"
         else:
             field = CardField(
@@ -127,3 +151,38 @@ def apply_card_edits(data: dict[str, Any] | MedicalCardData, edits: Iterable[Edi
         return MedicalCardData.model_validate(card.model_dump())
     except ValidationError as exc:
         raise DoctorInputError(SAVE_FAILED) from exc
+
+
+def apply_card_evidence(
+    data: dict[str, Any] | MedicalCardData,
+    evidence: dict[str, Any],
+) -> MedicalCardData:
+    """Return card data with selected source references removed or retained."""
+    try:
+        card = MedicalCardData.model_validate(
+            deepcopy(data) if isinstance(data, dict) else data.model_dump()
+        )
+    except ValidationError as exc:
+        raise DoctorInputError(SAVE_FAILED) from exc
+
+    fields = {field.field_id: field for field in card.fields}
+    updates = []
+    for field_id, segment_ids in evidence.items():
+        field = fields.get(field_id)
+        if (
+            field is None
+            or not isinstance(segment_ids, list)
+            or any(
+                type(segment_id) is not int or segment_id not in field.evidence
+                for segment_id in segment_ids
+            )
+            or len(set(segment_ids)) != len(segment_ids)
+        ):
+            raise DoctorInputError(SAVE_FAILED)
+        updates.append((field, segment_ids))
+
+    for field, segment_ids in updates:
+        field.evidence = list(segment_ids)
+        field.edited_by_doctor = True
+
+    return card
